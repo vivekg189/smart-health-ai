@@ -71,6 +71,11 @@ htmlcov/
 *.bak
 *.lock
 
+# Data / Models (if large or generated)
+backend/*.pkl
+backend/*.joblib
+backend/*.sav
+
 # Logs
 logs/
 *.log
