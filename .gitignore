@@ -72,9 +72,11 @@ htmlcov/
 *.lock
 
 # Data / Models (if large or generated)
-backend/*.pkl
-backend/*.joblib
-backend/*.sav
+# ML Models (ignore everywhere)
+*.pkl
+*.joblib
+*.sav
+
 
 # Logs
 logs/
