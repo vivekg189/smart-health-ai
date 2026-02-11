@@ -16,7 +16,10 @@ import {
   Slide,
   useTheme,
   useMediaQuery,
-  styled
+  styled,
+  Card,
+  CardContent,
+  Chip
 } from '@mui/material';
 import DownloadIcon from '@mui/icons-material/Download';
 import { jsPDF } from 'jspdf';
@@ -97,19 +100,18 @@ const ResultAlert = styled(Alert)(({ theme }) => ({
 const DiabetesForm = () => {
   const theme = useTheme();
   const [formData, setFormData] = useState({
-    gender: '',
-    age: '',
-    hypertension: '',
-    heart_disease: '',
-    smoking_history: '',
+    glucose: '',
     bmi: '',
-    HbA1c_level: '',
-    blood_glucose_level: ''
+    blood_pressure: '',
+    age: ''
   });
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState(null);
+  const [hospitals, setHospitals] = useState([]);
+  const [location, setLocation] = useState(null);
+  const [locationError, setLocationError] = useState('');
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -120,15 +122,30 @@ const DiabetesForm = () => {
   };
 
   const validateForm = () => {
-    if (!formData.gender) return 'Please select gender';
-    if (!formData.age || formData.age < 0 || formData.age > 120) return 'Please enter a valid age (0-120)';
-    if (!formData.hypertension) return 'Please select hypertension status';
-    if (!formData.heart_disease) return 'Please select heart disease status';
-    if (!formData.smoking_history) return 'Please select smoking history';
+    if (!formData.glucose || formData.glucose < 50 || formData.glucose > 300) return 'Please enter a valid glucose level (50-300 mg/dL)';
     if (!formData.bmi || formData.bmi < 10 || formData.bmi > 50) return 'Please enter a valid BMI (10-50)';
-    if (!formData.HbA1c_level || formData.HbA1c_level < 3.5 || formData.HbA1c_level > 15) return 'Please enter a valid HbA1c level (3.5-15)';
-    if (!formData.blood_glucose_level || formData.blood_glucose_level < 50 || formData.blood_glucose_level > 300) return 'Please enter a valid blood glucose level (50-300)';
+    if (!formData.blood_pressure || formData.blood_pressure < 60 || formData.blood_pressure > 200) return 'Please enter a valid blood pressure (60-200 mm Hg)';
+    if (!formData.age || formData.age < 0 || formData.age > 120) return 'Please enter a valid age (0-120 years)';
     return null;
+  };
+
+  const getCurrentLocation = () => {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error('Geolocation is not supported by this browser'));
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          resolve({ latitude, longitude });
+        },
+        (error) => {
+          reject(new Error('Unable to retrieve your location. Please enable location services.'));
+        }
+      );
+    });
   };
 
   const handleSubmit = async (e) => {
@@ -142,14 +159,32 @@ const DiabetesForm = () => {
     setLoading(true);
     setError('');
     setResult(null);
+    setHospitals([]);
+    setLocationError('');
 
     try {
+      // Get location first
+      let userLocation;
+      try {
+        userLocation = await getCurrentLocation();
+        setLocation(userLocation);
+      } catch (locError) {
+        setLocationError(locError.message);
+        // Continue without location - hospitals won't be fetched
+      }
+
+      const requestData = { ...formData };
+      if (userLocation) {
+        requestData.latitude = userLocation.latitude;
+        requestData.longitude = userLocation.longitude;
+      }
+
       const response = await fetch('http://localhost:5000/api/predict/diabetes', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(requestData),
       });
 
       const data = await response.json();
@@ -159,6 +194,9 @@ const DiabetesForm = () => {
       }
 
       setResult(data);
+      if (data.hospitals) {
+        setHospitals(data.hospitals);
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -167,10 +205,9 @@ const DiabetesForm = () => {
   };
 
   const getRiskLevel = (probability) => {
-    if (probability < 0.3) return 'Low';
-    if (probability < 0.6) return 'Medium';
-    if (probability < 0.8) return 'High';
-    return 'Very High';
+    if (probability < 0.33) return 'Low Risk';
+    if (probability < 0.66) return 'Moderate Risk';
+    return 'High Risk';
   };
 
   return (
@@ -186,77 +223,17 @@ const DiabetesForm = () => {
         <Box component="form" onSubmit={handleSubmit} sx={{ mt: 3 }}>
           <Grid container spacing={3}>
             <Grid item xs={12} sm={6}>
-              <FormControl fullWidth required>
-                <InputLabel>Gender</InputLabel>
-                <StyledSelect
-                  name="gender"
-                  value={formData.gender}
-                  onChange={handleChange}
-                  label="Gender"
-                >
-                  <MenuItem value="Male">Male</MenuItem>
-                  <MenuItem value="Female">Female</MenuItem>
-                </StyledSelect>
-              </FormControl>
-            </Grid>
-
-            <Grid item xs={12} sm={6}>
               <StyledTextField
                 required
                 fullWidth
-                label="Age"
-                name="age"
+                label="Glucose (mg/dL)"
+                name="glucose"
                 type="number"
-                value={formData.age}
+                value={formData.glucose}
                 onChange={handleChange}
-                inputProps={{ min: 0, max: 120, step: "1" }}
+                inputProps={{ min: 50, max: 300, step: "1" }}
+                helperText="Blood glucose concentration"
               />
-            </Grid>
-
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth required>
-                <InputLabel>Hypertension</InputLabel>
-                <StyledSelect
-                  name="hypertension"
-                  value={formData.hypertension}
-                  onChange={handleChange}
-                  label="Hypertension"
-                >
-                  <MenuItem value="0">No</MenuItem>
-                  <MenuItem value="1">Yes</MenuItem>
-                </StyledSelect>
-              </FormControl>
-            </Grid>
-
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth required>
-                <InputLabel>Heart Disease</InputLabel>
-                <StyledSelect
-                  name="heart_disease"
-                  value={formData.heart_disease}
-                  onChange={handleChange}
-                  label="Heart Disease"
-                >
-                  <MenuItem value="0">No</MenuItem>
-                  <MenuItem value="1">Yes</MenuItem>
-                </StyledSelect>
-              </FormControl>
-            </Grid>
-
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth required>
-                <InputLabel>Smoking History</InputLabel>
-                <StyledSelect
-                  name="smoking_history"
-                  value={formData.smoking_history}
-                  onChange={handleChange}
-                  label="Smoking History"
-                >
-                  <MenuItem value="never">Never</MenuItem>
-                  <MenuItem value="former">Former</MenuItem>
-                  <MenuItem value="current">Current</MenuItem>
-                </StyledSelect>
-              </FormControl>
             </Grid>
 
             <Grid item xs={12} sm={6}>
@@ -268,7 +245,8 @@ const DiabetesForm = () => {
                 type="number"
                 value={formData.bmi}
                 onChange={handleChange}
-                inputProps={{ min: 10, max: 50, step: "any" }}
+                inputProps={{ min: 10, max: 50, step: "0.1" }}
+                helperText="Body Mass Index"
               />
             </Grid>
 
@@ -276,12 +254,13 @@ const DiabetesForm = () => {
               <StyledTextField
                 required
                 fullWidth
-                label="HbA1c Level"
-                name="HbA1c_level"
+                label="Blood Pressure (mm Hg)"
+                name="blood_pressure"
                 type="number"
-                value={formData.HbA1c_level}
+                value={formData.blood_pressure}
                 onChange={handleChange}
-                inputProps={{ min: 3.5, max: 15, step: "0.1" }}
+                inputProps={{ min: 60, max: 200, step: "1" }}
+                helperText="Diastolic blood pressure"
               />
             </Grid>
 
@@ -289,12 +268,13 @@ const DiabetesForm = () => {
               <StyledTextField
                 required
                 fullWidth
-                label="Blood Glucose Level"
-                name="blood_glucose_level"
+                label="Age (years)"
+                name="age"
                 type="number"
-                value={formData.blood_glucose_level}
+                value={formData.age}
                 onChange={handleChange}
-                inputProps={{ min: 50, max: 300, step: "1" }}
+                inputProps={{ min: 0, max: 120, step: "1" }}
+                helperText="Age in years"
               />
             </Grid>
           </Grid>
@@ -318,21 +298,41 @@ const DiabetesForm = () => {
               </Slide>
             )}
 
+            {locationError && (
+              <Slide direction="up" in={!!locationError}>
+                <ResultAlert severity="warning" sx={{ width: '100%', mt: 1 }}>
+                  {locationError} Hospital recommendations will not be available.
+                </ResultAlert>
+              </Slide>
+            )}
+
             {result && (
               <Fade in timeout={500}>
                 <Box sx={{ width: '100%' }}>
-                  <ResultAlert 
-                    severity={result.prediction === 1 ? "error" : "success"}
+                  <ResultAlert
+                    severity={result.risk_level === "High Risk" ? "error" : "success"}
+                    sx={{
+                      backgroundColor: result.risk_level === "Low Risk" ? '#d4edda' : '#f8d7da',
+                      color: '#000',
+                      '& .MuiAlert-icon': {
+                        color: result.risk_level === "Low Risk" ? '#155724' : '#721c24',
+                      },
+                    }}
                   >
-                    <Typography variant="h6" sx={{ color: 'white', mb: 1 }}>
+                    <Typography variant="h6" sx={{ color: 'black', mb: 1 }}>
                       {result.message}
                     </Typography>
-                    <Typography sx={{ color: 'white', mb: 0.5 }}>
-                      Risk Level: {getRiskLevel(result.probability)}
+                    <Typography sx={{ color: 'black', mb: 0.5 }}>
+                      Risk Level: {result.risk_level}
                     </Typography>
-                    <Typography sx={{ color: 'white' }}>
+                    <Typography sx={{ color: 'black' }}>
                       Probability: {(result.probability * 100).toFixed(2)}%
                     </Typography>
+                    {result.disclaimer && (
+                      <Typography sx={{ color: 'black', fontSize: '0.8rem', mt: 1, fontStyle: 'italic' }}>
+                        {result.disclaimer}
+                      </Typography>
+                    )}
                   </ResultAlert>
 
                   <DownloadButton
@@ -349,18 +349,22 @@ const DiabetesForm = () => {
                       // Add form data
                       doc.text('Input Parameters:', 20, yPosition);
                       yPosition += 10;
-                      Object.entries(formData).forEach(([key, value]) => {
-                        doc.text(`${key}: ${value}`, 30, yPosition);
-                        yPosition += 10;
-                      });
-                      
+                      doc.text(`Glucose: ${formData.glucose} mg/dL`, 30, yPosition);
+                      yPosition += 10;
+                      doc.text(`BMI: ${formData.bmi}`, 30, yPosition);
+                      yPosition += 10;
+                      doc.text(`Blood Pressure: ${formData.blood_pressure} mm Hg`, 30, yPosition);
+                      yPosition += 10;
+                      doc.text(`Age: ${formData.age} years`, 30, yPosition);
+                      yPosition += 10;
+
                       yPosition += 10;
                       // Add results
                       doc.text('Results:', 20, yPosition);
                       yPosition += 10;
                       doc.text(`Prediction: ${result.message}`, 30, yPosition);
                       yPosition += 10;
-                      doc.text(`Risk Level: ${getRiskLevel(result.probability)}`, 30, yPosition);
+                      doc.text(`Risk Level: ${result.risk_level}`, 30, yPosition);
                       yPosition += 10;
                       doc.text(`Probability: ${(result.probability * 100).toFixed(2)}%`, 30, yPosition);
                       
@@ -374,6 +378,66 @@ const DiabetesForm = () => {
                   >
                     Download Results
                   </DownloadButton>
+
+                  {hospitals.length > 0 && (
+                    <Box sx={{ mt: 3 }}>
+                      <Typography variant="h6" sx={{ mb: 2, color: '#e53e3e' }}>
+                        Recommended Healthcare Facilities for Diabetes Care:
+                      </Typography>
+                      {hospitals.map((hospital, index) => (
+                        <Card key={index} sx={{ mb: 2, border: '1px solid #fed7d7', backgroundColor: '#fff5f5' }}>
+                          <CardContent sx={{ p: 2 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                              <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#2d3748' }}>
+                                {hospital.name}
+                              </Typography>
+                              <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+                                {hospital.distance} • {hospital.address}
+                              </Typography>
+                              <Typography variant="caption" sx={{
+                                backgroundColor: hospital.type === 'Government' ? '#e6fffa' : '#f0fff4',
+                                color: hospital.type === 'Government' ? '#2c7a7b' : '#2f855a',
+                                px: 1, py: 0.5, borderRadius: 1, mr: 1
+                              }}>
+                                {hospital.type}
+                              </Typography>
+                              {hospital.specialties && (
+                                <Box sx={{ mt: 1, mb: 1 }}>
+                                  {hospital.specialties.map(spec => (
+                                    <Chip
+                                      key={spec}
+                                      label={spec}
+                                      size="small"
+                                      variant="outlined"
+                                      sx={{ mr: 0.5, mb: 0.5 }}
+                                    />
+                                  ))}
+                                </Box>
+                              )}
+                              {hospital.recommendation_reason && (
+                                <Typography variant="body2" sx={{ fontStyle: 'italic', color: '#4a5568', mt: 1 }}>
+                                  💡 {hospital.recommendation_reason}
+                                </Typography>
+                              )}
+                              {location && (
+                                <Button
+                                  variant="outlined"
+                                  size="small"
+                                  component="a"
+                                  href={`https://www.google.com/maps/dir/?api=1&origin=${location.latitude},${location.longitude}&destination=${hospital.latitude},${hospital.longitude}&travelmode=driving`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  sx={{ mt: 1, fontSize: '0.75rem', minWidth: '120px', padding: '4px 8px', whiteSpace: 'nowrap' }}
+                                >
+                                  🗺️ Get Directions
+                                </Button>
+                              )}
+                            </Box>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </Box>
+                  )}
                 </Box>
               </Fade>
             )}

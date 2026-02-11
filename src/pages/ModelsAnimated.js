@@ -56,16 +56,6 @@ const ModelsAnimated = () => {
       features: ['X-Ray Analysis', 'Fracture Classification', 'Severity Assessment', 'Treatment Recommendations'],
       accuracy: '96.8%',
       path: '/bone-info'
-    },
-    {
-      id: 'bmi',
-      title: 'BMI Calculator',
-      description: 'Calculate your Body Mass Index (BMI) using height and weight measurements for health assessment.',
-      icon: '⚖️',
-      color: '#2196f3',
-      features: ['Height Input', 'Weight Input', 'BMI Calculation', 'Health Category'],
-      accuracy: '100%',
-      path: '/bmi'
     }
   ];
 

@@ -7,9 +7,9 @@ import '../styles/animations.css';
 const pages = [
   { name: 'Home', path: '/' },
   { name: 'Models', path: '/models' },
-  { name: 'Bone Fracture', path: '/bone' },
-  { name: 'Calculators', path: '/calculators' },
-  { name: 'Services', path: '/services' },
+  { name: 'NutriMind', path: '/assistant' },
+  { name: 'Hospital Finder', path: '/hospital-finder' },
+  { name: 'Report Analyzer', path: '/report-analyzer' },
   { name: 'Contact', path: '/contact' }
 ];
 

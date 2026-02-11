@@ -183,12 +183,6 @@ const Models = () => {
       form: <HeartForm />,
     },
     {
-      title: 'Bone Fracture',
-      description: 'Predict bone fracture risk using X-ray images and symptoms.',
-      image: 'https://images.unsplash.com/photo-1511174511562-5f97f4f4e0c8?auto=format&fit=crop&w=500&q=60',
-      form: null,
-    },
-    {
       title: 'Brain Tumor',
       description: 'Coming soon: Predict brain tumor using MRI scan images.',
       image: 'https://images.unsplash.com/photo-1576091160550-2173dba999ef?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=60',
@@ -283,7 +277,6 @@ const Models = () => {
                         else if (model.title === 'Diabetes') navigate('/diabetes-info');
                         else if (model.title === 'Kidney Disease') navigate('/kidney-info');
                         else if (model.title === 'Heart Disease') navigate('/heart-info');
-                        else if (model.title === 'Bone Fracture') navigate('/bone-info');
                       }}
                     >
                       Click here to know more

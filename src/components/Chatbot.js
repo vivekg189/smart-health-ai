@@ -17,7 +17,7 @@ const Chatbot = () => {
     const userInput = input;
     setInput('');
     try {
-      const res = await fetch('http://localhost:5000/api/gemini-chat', {
+      const res = await fetch('http://localhost:5000/api/groq-chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: userInput })
@@ -29,11 +29,11 @@ const Chatbot = () => {
         // Show more specific error messages
         let errorMessage = 'Sorry, there was an error getting a response.';
         if (data.error) {
-          if (data.error.includes('Invalid Gemini API key')) {
+          if (data.error.includes('Invalid Groq API key')) {
             errorMessage = 'API key configuration error. Please contact support.';
           } else if (data.error.includes('rate limit') || data.error.includes('quota')) {
             errorMessage = 'Service is busy. Please try again in a moment.';
-          } else if (data.error.includes('All Gemini models are currently unavailable')) {
+          } else if (data.error.includes('Groq API error')) {
             errorMessage = 'AI service is temporarily unavailable. Please try again later.';
           } else if (data.error.includes('Network error')) {
             errorMessage = 'Connection error. Please check your internet connection.';

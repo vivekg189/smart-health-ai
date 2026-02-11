@@ -6,14 +6,16 @@ import './styles/animations.css';
 import Navbar from './components/Navbar';
 import HomeAnimated from './pages/HomeAnimated';
 import ModelsAnimated from './pages/ModelsAnimated';
+import Assistant from './pages/Assistant';
+import HospitalFinder from './pages/HospitalFinder';
+import ReportAnalyzer from './pages/ReportAnalyzer';
 import Services from './pages/Services';
-import Calculators from './pages/Calculators';
 import DiabetesForm from './components/DiabetesForm';
 import HeartForm from './components/HeartForm';
 import LiverForm from './components/LiverForm';
 import KidneyForm from './components/KidneyForm';
-import BMIForm from './components/BMIForm';
 import BoneForm from './components/BoneForm';
+
 import About from './pages/About';
 import ContactAnimated from './pages/ContactAnimated';
 import Footer from './components/Footer';
@@ -40,8 +42,10 @@ function AppContent() {
           <Routes>
             <Route path="/" element={<HomeAnimated />} />
             <Route path="/models" element={<ModelsAnimated />} />
+            <Route path="/assistant" element={<Assistant />} />
+            <Route path="/hospital-finder" element={<HospitalFinder />} />
+            <Route path="/report-analyzer" element={<ReportAnalyzer />} />
             <Route path="/services" element={<Services />} />
-            <Route path="/calculators" element={<Calculators />} />
             <Route path="/diabetes" element={<DiabetesForm />} />
             <Route path="/diabetes-info" element={<DiabetesInfo />} />
             <Route path="/heart" element={<HeartForm />} />
@@ -51,10 +55,9 @@ function AppContent() {
             <Route path="/kidney" element={<KidneyForm />} />
             <Route path="/kidney-info" element={<KidneyInfo />} />
             <Route path="/bone-info" element={<BoneInfo />} />
+            <Route path="/bone" element={<BoneForm />} />
             <Route path="/about" element={<About />} />
             <Route path="/contact" element={<ContactAnimated />} />
-            <Route path="/bmi" element={<BMIForm />} />
-            <Route path="/bone" element={<BoneForm />} />
           </Routes>
         </Container>
       </main>
