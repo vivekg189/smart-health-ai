@@ -15,8 +15,12 @@ import requests
 from PIL import Image
 import io
 from transformers import pipeline
-import pytesseract
 import PyPDF2
+import easyocr
+import warnings
+
+# Suppress EasyOCR warnings
+warnings.filterwarnings('ignore', category=UserWarning, module='torch')
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -24,6 +28,22 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 CORS(app)
+
+# Initialize EasyOCR reader (load once at startup)
+_ocr_reader = None
+try:
+    logger.info("Loading EasyOCR reader with GPU...")
+    _ocr_reader = easyocr.Reader(['en'], gpu=True)
+    logger.info("EasyOCR reader loaded successfully with GPU")
+except Exception as e:
+    logger.error(f"Failed to load EasyOCR with GPU: {str(e)}")
+    logger.info("Falling back to CPU mode...")
+    try:
+        _ocr_reader = easyocr.Reader(['en'], gpu=False)
+        logger.info("EasyOCR reader loaded successfully with CPU")
+    except Exception as e2:
+        logger.error(f"Failed to load EasyOCR: {str(e2)}")
+        _ocr_reader = None
 
 # Get the absolute path to the backend directory
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -63,16 +83,7 @@ try:
     logger.info("Liver model loaded successfully")
 except Exception as e:
     _liver_err = str(e)
-    logger.warning(f"Failed to load liver model: {_liver_err}")
-    logger.info("Attempting to load with allow_pickle=True...")
-    try:
-        import pickle
-        with open(_liver_path, 'rb') as f:
-            liver_model = pickle.load(f)
-        logger.info("Liver model loaded successfully with pickle")
-    except Exception as e2:
-        _liver_err = str(e2)
-        logger.error(f"Failed to load liver model with pickle: {_liver_err}", exc_info=True)
+    logger.warning(f"Liver model not available due to compatibility issue. Liver predictions will be disabled.")
 
 try:
     kidney_scaler = joblib.load(_k_scaler_path)
@@ -100,9 +111,7 @@ try:
     _bone_pipeline = pipeline(
         task='image-classification',
         model=_bone_hf_model_id,
-        framework='pt',  # Force PyTorch instead of TensorFlow
-        device=-1,  # Force CPU
-        trust_remote_code=True
+        device=-1
     )
     logger.info(f"Bone fracture model '{_bone_hf_model_id}' loaded successfully")
 except Exception as e:
@@ -469,13 +478,29 @@ def predict_bone_fracture():
 
         # Run inference using Transformers pipeline directly with PIL image
         preds = _bone_pipeline(img)
-        # preds is a list of dicts like [{'label': 'Fracture', 'score': 0.95}, ...]
-        top = preds[0] if preds else {'label': 'Unknown', 'score': 0.0}
-        label = top.get('label', 'Unknown')
-        score = float(top.get('score', 0.0))
-
-        # Normalize label to Fracture / No Fracture
-        norm_label = 'Fracture' if 'fracture' in label.lower() else 'No Fracture'
+        logger.info(f"Model predictions: {preds}")
+        
+        # The model returns predictions - we need to check what labels it uses
+        # Common labels: 'fractured', 'not fractured', 'normal', 'fracture', etc.
+        
+        # Use the highest confidence prediction
+        if not preds:
+            return jsonify({'error': 'Model returned no predictions'}), 500
+        
+        top_pred = preds[0]
+        label = top_pred['label'].lower()
+        score = float(top_pred['score'])
+        
+        logger.info(f"Top prediction - Label: {label}, Score: {score}")
+        
+        # Determine if it's a fracture based on label keywords
+        # Only classify as fracture if confidence is high AND label indicates fracture
+        is_fracture = False
+        if score >= 0.75:  # High confidence threshold
+            if 'fracture' in label and 'not' not in label and 'no' not in label:
+                is_fracture = True
+        
+        norm_label = 'Fracture' if is_fracture else 'No Fracture'
         confidence_pct = round(score * 100.0, 2)
 
         # Heuristic severity/urgency for UI chips
@@ -545,9 +570,10 @@ def predict_bone_fracture():
 def groq_chat():
     try:
         data = request.get_json()
-        user_message = data.get('message', '')
+        user_message = data.get('message', '').strip()
+
         if not user_message:
-            return jsonify({'error': 'No message provided'}), 400
+            return jsonify({'error': 'Message is required'}), 400
 
         # Get Groq API key from environment variable or use default
         GROQ_API_KEY = os.getenv('GROQ_API_KEY', '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')
@@ -556,53 +582,95 @@ def groq_chat():
         GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions'
 
         payload = {
-            "messages": [
-                {"role": "user", "content": user_message}
-            ],
-            "model": "llama-3.1-8b-instant"
+    "model": "llama-3.1-8b-instant",
+    "messages": [
+        {
+            "role": "system",
+            "content": (
+                """You are a healthcare information assistant for a hospital website.
+
+STRICT RULES:
+- Provide general medical information only
+- Do NOT diagnose or prescribe
+- Use neutral, non-alarming language
+- Keep content short and structured
+- Never exceed the given format
+
+RESPONSE FORMAT (MANDATORY):
+Symptoms Overview:
+- <1–2 short points>
+
+What You Can Do Now:
+- <1–2 safe general actions>
+
+When to See a Doctor:
+- <clear medical escalation>
+
+Do NOT add extra sections.
+Do NOT add emojis.
+Do NOT add disclaimers unless requested.
+""")
+        },
+        {
+            "role": "user",
+            "content": user_message
         }
+    ],
+    "temperature": 0.1,
+    "top_p": 0.9,
+    "max_tokens": 350,
+    "frequency_penalty": 0.2,
+    "presence_penalty": 0.0
+}
+
+        
         headers = {
             'Content-Type': 'application/json',
             'Authorization': f'Bearer {GROQ_API_KEY}'
         }
         
-        response = requests.post(GROQ_API_URL, json=payload, headers=headers)
+        response = requests.post(GROQ_API_URL, json=payload, headers=headers, timeout=20)
         
-        if response.status_code == 200:
-            groq_data = response.json()
-            
-            try:
-                choices = groq_data.get('choices', [])
-                if not choices:
-                    return jsonify({'error': 'No response from Groq API'}), 500
-                
-                message = choices[0].get('message', {})
-                groq_text = message.get('content', '')
-                
-                if not groq_text:
-                    return jsonify({'error': 'Empty response from Groq API'}), 500
-                
-                return jsonify({'response': groq_text})
-                
-            except (KeyError, IndexError) as e:
-                logger.error(f"Error parsing Groq response: {str(e)}")
-                return jsonify({'error': 'Failed to parse Groq response'}), 500
-                
-        elif response.status_code == 401:
-            return jsonify({'error': 'Invalid Groq API key', 'details': 'Please check your API key configuration'}), 500
-        elif response.status_code == 429:
-            return jsonify({'error': 'Rate limit exceeded', 'details': 'Please try again later'}), 500
-        else:
-            error_details = response.text
-            logger.error(f"Groq API error: Status {response.status_code}, Response: {error_details}")
-            return jsonify({'error': 'Groq API error', 'details': error_details}), 500
-        
+        if response.status_code != 200:
+            logger.error(f"Groq API Error {response.status_code}: {response.text}")
+            return jsonify({
+                'error': 'Groq API failed',
+                'details': response.text
+            }), 500
+
+        groq_data = response.json()
+
+        choices = groq_data.get('choices', [])
+        if not choices:
+            return jsonify({'error': 'No response from Groq'}), 500
+
+        message = choices[0].get('message', {})
+        answer = message.get('content', '').strip()
+
+        if not answer:
+            return jsonify({'error': 'Empty response from Groq'}), 500
+
+        # Optional post-processing
+        answer = answer.replace("\n\n", "\n")
+
+        return jsonify({'response': answer})
+
+    except requests.exceptions.Timeout:
+        return jsonify({'error': 'Groq API timeout'}), 504
+
     except requests.exceptions.RequestException as e:
-        logger.error(f"Network error in Groq chat: {str(e)}", exc_info=True)
-        return jsonify({'error': 'Network error connecting to Groq API', 'details': str(e)}), 500
+        logger.error(f"Network error: {str(e)}", exc_info=True)
+        return jsonify({
+            'error': 'Network error',
+            'details': str(e)
+        }), 500
+
     except Exception as e:
-        logger.error(f"Error in Groq chat: {str(e)}", exc_info=True)
-        return jsonify({'error': 'Internal server error', 'details': str(e)}), 500
+        logger.error(f"Internal error: {str(e)}", exc_info=True)
+        return jsonify({
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
 
 @app.route('/api/hospitals/nearby', methods=['GET'])
 def get_nearby_hospitals():
@@ -1029,19 +1097,32 @@ def extract_text_from_pdf(file_bytes):
         pdf_reader = PyPDF2.PdfReader(io.BytesIO(file_bytes))
         text = ''
         for page in pdf_reader.pages:
-            text += page.extract_text()
-        return text
+            page_text = page.extract_text()
+            if page_text:
+                text += page_text + ' '
+        return text.strip() if text.strip() else None
     except Exception as e:
-        logger.error(f"PDF extraction error: {str(e)}")
+        logger.error(f"PDF extraction error: {str(e)}", exc_info=True)
         return None
 
 def extract_text_from_image(file_bytes):
     try:
+        if _ocr_reader is None:
+            logger.error("EasyOCR reader not initialized")
+            return None
+        
         img = Image.open(io.BytesIO(file_bytes))
-        text = pytesseract.image_to_string(img)
-        return text
+        img_array = np.array(img)
+        
+        # Use EasyOCR to extract text
+        results = _ocr_reader.readtext(img_array)
+        
+        # Combine all detected text
+        text = ' '.join([result[1] for result in results])
+        
+        return text.strip() if text.strip() else None
     except Exception as e:
-        logger.error(f"OCR error: {str(e)}")
+        logger.error(f"EasyOCR error: {str(e)}", exc_info=True)
         return None
 
 def get_health_recommendations(param_key, status, value):
@@ -1205,19 +1286,22 @@ def analyze_medical_report():
         
         if ext == '.pdf':
             text = extract_text_from_pdf(file_bytes)
+            if not text:
+                return jsonify({'error': 'Could not extract text from PDF. The file may be scanned or image-based. Try uploading as an image instead.'}), 400
         elif ext in ['.jpg', '.jpeg', '.png']:
             text = extract_text_from_image(file_bytes)
+            if not text:
+                return jsonify({'error': 'Could not extract text from image. Please ensure the image contains clear, readable text.'}), 400
         else:
-            return jsonify({'error': 'Unsupported file format. Please upload PDF or image files.'}), 400
+            return jsonify({'error': 'Unsupported file format. Please upload PDF or image files (JPG, PNG).'}), 400
         
-        if not text:
-            return jsonify({'error': 'Failed to extract text from the file'}), 500
+        logger.info(f"Extracted text length: {len(text)} characters")
         
         parameters = analyze_parameters(text)
         
         if not parameters:
             return jsonify({
-                'message': 'No medical parameters detected in the report',
+                'message': 'No medical parameters detected in the report. Please ensure the report contains values like glucose, hemoglobin, cholesterol, etc.',
                 'parameters': [],
                 'disclaimer': 'This is an AI-assisted analysis and not a medical diagnosis. Always consult a qualified healthcare professional.'
             })

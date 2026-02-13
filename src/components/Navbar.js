@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import { Navbar as BootstrapNavbar, Nav, Container } from 'react-bootstrap';
+import { FaAmbulance } from 'react-icons/fa';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import '../styles/animations.css';
 
@@ -105,6 +106,34 @@ const Navbar = ({ onlyModels }) => {
                 {page.name}
               </Nav.Link>
             ))}
+          </Nav>
+          
+          <Nav className="ms-auto">
+            <Nav.Link
+              as={RouterLink}
+              to="/emergency"
+              className="d-flex align-items-center justify-content-center"
+              style={{
+                width: '50px',
+                height: '50px',
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, #ff4444 0%, #cc0000 100%)',
+                boxShadow: '0 0 20px rgba(241, 108, 108, 0.6), 0 0 40px rgba(255, 68, 68, 0.4)',
+                transition: 'all 0.3s ease',
+                animation: 'pulse 2s infinite'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'scale(1.15)';
+                e.currentTarget.style.boxShadow = '0 0 30px rgba(255, 68, 68, 0.8), 0 0 60px rgba(255, 68, 68, 0.6)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'scale(1)';
+                e.currentTarget.style.boxShadow = '0 0 20px rgba(255, 68, 68, 0.6), 0 0 40px rgba(255, 68, 68, 0.4)';
+              }}
+              title="Emergency Mode - Quick Access"
+            >
+              <FaAmbulance style={{ color: 'white', fontSize: '1.5rem' }} />
+            </Nav.Link>
           </Nav>
         </BootstrapNavbar.Collapse>
       </Container>

@@ -73,7 +73,7 @@ const Chatbot = () => {
           }}
           aria-label="Open chatbot"
         >
-          💬
+          🤖
         </button>
       )}
       {/* Chat Window */}

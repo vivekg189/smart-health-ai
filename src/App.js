@@ -9,6 +9,7 @@ import ModelsAnimated from './pages/ModelsAnimated';
 import Assistant from './pages/Assistant';
 import HospitalFinder from './pages/HospitalFinder';
 import ReportAnalyzer from './pages/ReportAnalyzer';
+import EmergencyMode from './pages/EmergencyMode';
 import Services from './pages/Services';
 import DiabetesForm from './components/DiabetesForm';
 import HeartForm from './components/HeartForm';
@@ -45,6 +46,7 @@ function AppContent() {
             <Route path="/assistant" element={<Assistant />} />
             <Route path="/hospital-finder" element={<HospitalFinder />} />
             <Route path="/report-analyzer" element={<ReportAnalyzer />} />
+            <Route path="/emergency" element={<EmergencyMode />} />
             <Route path="/services" element={<Services />} />
             <Route path="/diabetes" element={<DiabetesForm />} />
             <Route path="/diabetes-info" element={<DiabetesInfo />} />
