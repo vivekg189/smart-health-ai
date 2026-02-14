@@ -16,6 +16,8 @@ import HeartForm from './components/HeartForm';
 import LiverForm from './components/LiverForm';
 import KidneyForm from './components/KidneyForm';
 import BoneForm from './components/BoneForm';
+import MeetDoctor from './components/MeetDoctor';
+import VideoConsultation from './pages/VideoConsultation';
 
 import About from './pages/About';
 import ContactAnimated from './pages/ContactAnimated';
@@ -58,6 +60,8 @@ function AppContent() {
             <Route path="/kidney-info" element={<KidneyInfo />} />
             <Route path="/bone-info" element={<BoneInfo />} />
             <Route path="/bone" element={<BoneForm />} />
+            <Route path="/meet-doctor" element={<MeetDoctor />} />
+            <Route path="/video-consultation" element={<VideoConsultation />} />
             <Route path="/about" element={<About />} />
             <Route path="/contact" element={<ContactAnimated />} />
           </Routes>

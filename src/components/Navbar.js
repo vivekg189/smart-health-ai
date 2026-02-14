@@ -10,6 +10,7 @@ const pages = [
   { name: 'Models', path: '/models' },
   { name: 'NutriMind', path: '/assistant' },
   { name: 'Hospital Finder', path: '/hospital-finder' },
+  { name: 'Meet a Doctor', path: '/meet-doctor' },
   { name: 'Report Analyzer', path: '/report-analyzer' },
   { name: 'Contact', path: '/contact' }
 ];

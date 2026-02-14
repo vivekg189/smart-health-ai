@@ -1,0 +1,90 @@
+[
+  {
+    "id": 1,
+    "name": "Dr. Rahul Mehta",
+    "specialization": "Cardiologist",
+    "hospital": "City Care Hospital",
+    "latitude": 17.3850,
+    "longitude": 78.4867,
+    "rating": 4.6,
+    "available": true,
+    "consultation_types": ["video", "in-person"]
+  },
+  {
+    "id": 2,
+    "name": "Dr. Priya Sharma",
+    "specialization": "General Physician",
+    "hospital": "Apollo Hospitals",
+    "latitude": 17.4400,
+    "longitude": 78.3489,
+    "rating": 4.8,
+    "available": true,
+    "consultation_types": ["video", "in-person"]
+  },
+  {
+    "id": 3,
+    "name": "Dr. Amit Kumar",
+    "specialization": "Orthopedic",
+    "hospital": "KIMS Hospital",
+    "latitude": 17.4326,
+    "longitude": 78.4071,
+    "rating": 4.5,
+    "available": false,
+    "consultation_types": ["in-person"]
+  },
+  {
+    "id": 4,
+    "name": "Dr. Sneha Reddy",
+    "specialization": "Dermatologist",
+    "hospital": "Care Hospital",
+    "latitude": 17.4239,
+    "longitude": 78.4738,
+    "rating": 4.7,
+    "available": true,
+    "consultation_types": ["video", "in-person"]
+  },
+  {
+    "id": 5,
+    "name": "Dr. Vikram Singh",
+    "specialization": "Neurologist",
+    "hospital": "Yashoda Hospital",
+    "latitude": 17.3616,
+    "longitude": 78.4747,
+    "rating": 4.9,
+    "available": true,
+    "consultation_types": ["video", "in-person"]
+  },
+  {
+    "id": 6,
+    "name": "Dr. Anjali Desai",
+    "specialization": "Pediatrician",
+    "hospital": "Rainbow Children's Hospital",
+    "latitude": 17.4435,
+    "longitude": 78.3772,
+    "rating": 4.8,
+    "available": false,
+    "consultation_types": ["video", "in-person"]
+  },
+  {
+    "id": 7,
+    "name": "Dr. Rajesh Gupta",
+    "specialization": "General Physician",
+    "hospital": "Medicover Hospital",
+    "latitude": 17.4065,
+    "longitude": 78.5512,
+    "rating": 4.4,
+    "available": true,
+    "consultation_types": ["video", "in-person"]
+  },
+  {
+    "id": 8,
+    "name": "Dr. Kavita Nair",
+    "specialization": "Cardiologist",
+    "hospital": "Continental Hospital",
+    "latitude": 17.4900,
+    "longitude": 78.3953,
+    "rating": 4.7,
+    "available": true,
+    "consultation_types": ["video", "in-person"]
+  }
+]

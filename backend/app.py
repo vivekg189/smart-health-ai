@@ -11,6 +11,7 @@ import csv
 from sklearn import preprocessing
 from sklearn.tree import DecisionTreeClassifier, _tree
 import requests
+import json
 # New imports for bone fracture module
 from PIL import Image
 import io
@@ -1316,6 +1317,136 @@ def analyze_medical_report():
     except Exception as e:
         logger.error(f"Report analysis error: {str(e)}", exc_info=True)
         return jsonify({'error': 'Failed to analyze report', 'details': str(e)}), 500
+
+@app.route('/api/doctors', methods=['GET'])
+def get_doctors():
+    try:
+        lat = request.args.get('lat')
+        lon = request.args.get('lon')
+        specialization = request.args.get('specialization')
+        min_rating = request.args.get('min_rating', type=float)
+        available_only = request.args.get('available_only', 'false').lower() == 'true'
+
+        if not lat or not lon:
+            return jsonify({'error': 'Latitude and longitude are required'}), 400
+
+        lat, lon = float(lat), float(lon)
+
+        overpass_query = f"""
+        [out:json][timeout:25];
+        (
+          node["amenity"="doctors"](around:20000,{lat},{lon});
+          node["amenity"="clinic"](around:20000,{lat},{lon});
+          way["amenity"="doctors"](around:20000,{lat},{lon});
+          way["amenity"="clinic"](around:20000,{lat},{lon});
+        );
+        out center meta;
+        """
+
+        response = requests.post(
+            'https://overpass-api.de/api/interpreter',
+            data=overpass_query,
+            headers={'Content-Type': 'text/plain'},
+            timeout=30
+        )
+
+        if response.status_code != 200:
+            return jsonify({'error': 'Failed to fetch doctors data'}), 500
+
+        data = response.json()
+        doctors = []
+
+        for idx, element in enumerate(data.get('elements', [])):
+            tags = element.get('tags', {})
+            name = tags.get('name', tags.get('operator', f'Medical Center {idx+1}'))
+
+            if element['type'] == 'node':
+                d_lat, d_lon = element['lat'], element['lon']
+            elif 'center' in element:
+                d_lat, d_lon = element['center']['lat'], element['center']['lon']
+            else:
+                continue
+
+            distance = calculate_distance(lat, lon, d_lat, d_lon)
+
+            address_parts = []
+            for key in ['addr:street', 'addr:city', 'addr:postcode']:
+                if key in tags:
+                    address_parts.append(tags[key])
+            address = ', '.join(address_parts) if address_parts else 'Address not available'
+
+            spec = tags.get('healthcare:speciality', tags.get('speciality', 'General Physician'))
+            
+            doctor = {
+                'id': idx + 1,
+                'name': name,
+                'specialization': spec.title(),
+                'hospital': tags.get('operator', name),
+                'latitude': d_lat,
+                'longitude': d_lon,
+                'distance': round(distance, 2),
+                'rating': round(3.5 + (hash(name) % 15) / 10, 1),
+                'available': (hash(name) % 3) != 0,
+                'consultation_types': ['video', 'in-person'] if (hash(name) % 2) == 0 else ['in-person'],
+                'address': address,
+                'phone': tags.get('phone', 'N/A')
+            }
+            doctors.append(doctor)
+
+        doctors.sort(key=lambda x: x['distance'])
+
+        if specialization and specialization != 'All':
+            doctors = [d for d in doctors if specialization.lower() in d['specialization'].lower()]
+
+        if min_rating:
+            doctors = [d for d in doctors if d['rating'] >= min_rating]
+
+        if available_only:
+            doctors = [d for d in doctors if d['available']]
+
+        return jsonify({'doctors': doctors[:20]})
+
+    except Exception as e:
+        logger.error(f"Error fetching doctors: {str(e)}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/start-video-call', methods=['POST'])
+def start_video_call():
+    try:
+        data = request.get_json()
+        doctor_id = data.get('doctor_id')
+        
+        if not doctor_id:
+            return jsonify({'error': 'Doctor ID is required'}), 400
+
+        doctors_path = os.path.join(BACKEND_DIR, 'doctors_data.json')
+        with open(doctors_path, 'r') as f:
+            doctors = json.load(f)
+
+        doctor = next((d for d in doctors if d['id'] == doctor_id), None)
+        
+        if not doctor:
+            return jsonify({'error': 'Doctor not found'}), 404
+
+        if not doctor['available']:
+            return jsonify({'error': 'Doctor is currently unavailable'}), 400
+
+        if 'video' not in doctor['consultation_types']:
+            return jsonify({'error': 'Doctor does not support video consultations'}), 400
+
+        import uuid
+        room_id = f"consultation-{doctor_id}-{uuid.uuid4().hex[:8]}"
+
+        return jsonify({
+            'success': True,
+            'room_id': room_id,
+            'doctor_name': doctor['name'],
+            'specialization': doctor['specialization']
+        })
+
+    except Exception as e:
+        logger.error(f"Error starting video call: {str(e)}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     logger.info("Starting Flask application")
