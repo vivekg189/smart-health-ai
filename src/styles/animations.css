@@ -1,5 +1,15 @@
 /* Modern Animations for Healthcare AI App */
 
+/* Hide scrollbar */
+::-webkit-scrollbar {
+  display: none;
+}
+
+html {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
 /* Smooth transitions for all elements */
 * {
   transition: all 0.3s ease;

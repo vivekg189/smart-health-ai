@@ -23,6 +23,7 @@ import {
 } from '@mui/material';
 import DownloadIcon from '@mui/icons-material/Download';
 import { jsPDF } from 'jspdf';
+import { savePrediction } from '../utils/api';
 
 // Styled Components
 const FormContainer = styled(Box)(({ theme }) => ({
@@ -196,6 +197,19 @@ const DiabetesForm = () => {
       setResult(data);
       if (data.hospitals) {
         setHospitals(data.hospitals);
+      }
+
+      // Save prediction to database
+      try {
+        await savePrediction({
+          disease_type: 'diabetes',
+          prediction_result: data.risk_level,
+          probability: data.probability,
+          risk_level: data.risk_level,
+          input_data: formData
+        });
+      } catch (saveError) {
+        console.error('Failed to save prediction:', saveError);
       }
     } catch (err) {
       setError(err.message);

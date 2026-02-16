@@ -171,7 +171,7 @@ const Home = () => {
   ];
 
   const handleStartPrediction = () => {
-    navigate('/models');
+    navigate('/auth');
   };
 
   return (

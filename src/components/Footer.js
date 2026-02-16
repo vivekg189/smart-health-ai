@@ -7,45 +7,47 @@ import '../styles/animations.css';
 const Footer = () => {
   return (
     <footer 
-      className="mt-auto py-4 animate-fadeIn"
+      className="mt-auto py-3 animate-fadeIn"
       style={{
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-        color: 'white'
+        background: '#6c757d',
+        color: 'white',
+        width: '100vw',
+        marginLeft: 'calc(-50vw + 50%)',
+        marginRight: 'calc(-50vw + 50%)'
       }}
     >
-      <Container>
-        <Row>
-          <Col md={6} className="mb-3 mb-md-0">
+      <Container fluid className="px-5">
+        <Row className="mb-2">
+          <Col md={6} className="mb-2 mb-md-0">
             <div className="d-flex align-items-center mb-2">
-              <span className="fs-4 me-2">🏥</span>
+              <span className="fs-5 me-2"></span>
               <Link 
                 to="/" 
-                className="text-decoration-none text-white fw-bold fs-5 hover-glow"
-                style={{
-                  transition: 'all 0.3s ease'
-                }}
+                className="text-decoration-none text-white fw-bold fs-6 hover-glow"
+                style={{ transition: 'all 0.3s ease' }}
               >
-                Healthcare AI Platform
+                Smart Health AI
               </Link>
             </div>
             <p className="small opacity-75 mb-0">
-              Advanced AI-driven medical risk assessment and diagnostic support system.
+              AI-driven healthcare insights and personalized medical guidance.
             </p>
           </Col>
           <Col md={6} className="text-md-end">
-            <p className="small opacity-75 mb-2">
-              © {new Date().getFullYear()} Healthcare Risk Assessment. All rights reserved.
-            </p>
-            <p className="small opacity-75 mb-0">
-              ⚠️ This AI tool is for informational purposes only. Always consult healthcare professionals for medical decisions.
-            </p>
+            <p className="small opacity-75 mb-1">📧 support@smarthealth.ai</p>
+            <p className="small opacity-75 mb-0">📞 Emergency: 108 | 100 | 101</p>
           </Col>
         </Row>
-        <hr className="my-3 opacity-25" />
+        <hr className="my-2 opacity-25" />
         <Row>
-          <Col className="text-center">
+          <Col md={6} className="text-center text-md-start">
             <p className="small opacity-75 mb-0">
-              🔒 HIPAA Compliant | 🎯 99.8% Clinical Accuracy | 🌍 Available 24/7
+              © {new Date().getFullYear()} Smart Health AI. All rights reserved.
+            </p>
+          </Col>
+          <Col md={6} className="text-center text-md-end">
+            <p className="small opacity-75 mb-0">
+              🔒 Privacy Protected | 🎯 AI-Powered | ⚕️ Medical Grade
             </p>
           </Col>
         </Row>

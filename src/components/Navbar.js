@@ -41,9 +41,7 @@ const Navbar = ({ onlyModels }) => {
   const navPages = onlyModels ? [modelsPage] : pages;
 
   const navbarStyle = {
-    background: scrolled 
-      ? 'rgba(102, 126, 234, 0.95)' 
-      : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+    background: '#6c757d',
     boxShadow: scrolled 
       ? '0 8px 32px rgba(0,0,0,0.2)' 
       : '0 4px 20px rgba(0,0,0,0.1)',
@@ -67,7 +65,7 @@ const Navbar = ({ onlyModels }) => {
       fixed="top" 
       style={navbarStyle}
       variant="dark"
-      className={`shadow-lg navbar-animated animate-slideInLeft ${scrolled ? 'scrolled' : ''}`}
+      className={`shadow-lg navbar-animated animate-slideInLeft`}
     >
       <Container>
         <BootstrapNavbar.Brand 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 const Chatbot = () => {
   const [open, setOpen] = useState(false);
@@ -8,6 +8,15 @@ const Chatbot = () => {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const messagesEndRef = useRef(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
 
   const handleSend = async () => {
     if (!input.trim()) return;
@@ -64,7 +73,7 @@ const Chatbot = () => {
             borderRadius: '50%',
             width: 60,
             height: 60,
-            background: '#2563eb',
+            background: '#61a8ef',
             color: 'white',
             border: 'none',
             boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
@@ -93,7 +102,7 @@ const Chatbot = () => {
             zIndex: 1000
           }}
         >
-          <div style={{ padding: 12, borderBottom: '1px solid #eee', fontWeight: 'bold', background: '#2563eb', color: 'white', borderTopLeftRadius: 16, borderTopRightRadius: 16 }}>
+          <div style={{ padding: 12, borderBottom: '1px solid #eee', fontWeight: 'bold', background: '#0066cc', color: 'white', borderTopLeftRadius: 16, borderTopRightRadius: 16 }}>
             Healthcare Bot
             <button onClick={() => setOpen(false)} style={{ float: 'right', background: 'none', border: 'none', color: 'white', fontSize: 20, cursor: 'pointer' }}>&times;</button>
           </div>
@@ -102,12 +111,14 @@ const Chatbot = () => {
               <div key={idx} style={{ textAlign: msg.from === 'user' ? 'right' : 'left', margin: '8px 0' }}>
                 <span style={{
                   display: 'inline-block',
-                  background: msg.from === 'user' ? '#2563eb' : '#e5e7eb',
+                  background: msg.from === 'user' ? '#0066cc' : '#e5e7eb',
                   color: msg.from === 'user' ? 'white' : '#111',
                   borderRadius: 12,
                   padding: '8px 12px',
                   maxWidth: '80%',
-                  wordBreak: 'break-word'
+                  wordBreak: 'break-word',
+                  whiteSpace: 'pre-wrap',
+                  textAlign: 'left'
                 }}>{msg.text}</span>
               </div>
             ))}
@@ -117,6 +128,7 @@ const Chatbot = () => {
             {error && (
               <div style={{ color: 'red', fontSize: 12 }}>{error}</div>
             )}
+            <div ref={messagesEndRef} />
           </div>
           <div style={{ display: 'flex', borderTop: '1px solid #eee', padding: 8, background: '#fff', borderBottomLeftRadius: 16, borderBottomRightRadius: 16 }}>
             <input
@@ -129,7 +141,7 @@ const Chatbot = () => {
             />
             <button
               onClick={handleSend}
-              style={{ marginLeft: 8, background: '#2563eb', color: 'white', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}
+              style={{ marginLeft: 8, background: '#0066cc', color: 'white', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}
             >
               Send
             </button>
