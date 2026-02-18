@@ -1,8 +1,11 @@
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+const API_ENDPOINT = `${API_BASE_URL}/api`;
+
+export { API_BASE_URL, API_ENDPOINT };
 
 export const savePrediction = async (predictionData) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/data/predictions`, {
+    const response = await fetch(`${API_ENDPOINT}/data/predictions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -22,7 +25,7 @@ export const savePrediction = async (predictionData) => {
 
 export const getPredictions = async () => {
   try {
-    const response = await fetch(`${API_BASE_URL}/data/predictions`, {
+    const response = await fetch(`${API_ENDPOINT}/data/predictions`, {
       method: 'GET',
       credentials: 'include'
     });
@@ -40,7 +43,7 @@ export const getPredictions = async () => {
 
 export const createConsultation = async (consultationData) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/data/consultations`, {
+    const response = await fetch(`${API_ENDPOINT}/data/consultations`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -60,7 +63,7 @@ export const createConsultation = async (consultationData) => {
 
 export const getConsultations = async () => {
   try {
-    const response = await fetch(`${API_BASE_URL}/data/consultations`, {
+    const response = await fetch(`${API_ENDPOINT}/data/consultations`, {
       method: 'GET',
       credentials: 'include'
     });
@@ -78,7 +81,7 @@ export const getConsultations = async () => {
 
 export const updateDoctorAvailability = async (availabilityData) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/data/doctor/availability`, {
+    const response = await fetch(`${API_ENDPOINT}/data/doctor/availability`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',

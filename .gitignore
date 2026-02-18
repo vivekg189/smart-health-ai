@@ -89,3 +89,7 @@ yarn-error.log*
 .sass-cache/
 .cache-loader/
 .husky/_/
+
+# Local credential backups
+*.local.backup
+.env.local.backup

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import config from '../config';
 
 const Chatbot = () => {
   const [open, setOpen] = useState(false);
@@ -26,7 +27,7 @@ const Chatbot = () => {
     const userInput = input;
     setInput('');
     try {
-      const res = await fetch('http://localhost:5000/api/groq-chat', {
+      const res = await fetch(`${config.API_BASE}/groq-chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: userInput })
