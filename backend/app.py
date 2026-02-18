@@ -46,7 +46,13 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-CORS(app, supports_credentials=True, origins=['http://localhost:3000'], methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], allow_headers=['Content-Type', 'Authorization'])
+CORS(
+    app,
+    supports_credentials=True,
+    origins=['http://localhost:3000', 'http://localhost:3001'],
+    methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allow_headers=['Content-Type', 'Authorization']
+)
 
 app.config['SESSION_TYPE'] = 'filesystem'
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'

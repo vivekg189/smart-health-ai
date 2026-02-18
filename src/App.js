@@ -42,7 +42,7 @@ function AppContent() {
   const { user } = useAuth();
   const infoRoutes = ['/liver-info', '/diabetes-info', '/kidney-info', '/heart-info'];
   const showOnlyModelsButton = infoRoutes.includes(location.pathname);
-  const hideNavbar = ['/', '/auth', '/patient-dashboard', '/doctor-dashboard'].includes(location.pathname) || 
+  const hideNavbar = ['/', '/auth', '/patient-dashboard', '/doctor-dashboard', '/emergency'].includes(location.pathname) || 
                      location.pathname.startsWith('/models') || 
                      location.pathname.startsWith('/assistant') || 
                      location.pathname.startsWith('/hospital-finder') || 
@@ -53,15 +53,24 @@ function AppContent() {
                      location.pathname.startsWith('/heart') || 
                      location.pathname.startsWith('/liver') || 
                      location.pathname.startsWith('/kidney') || 
-                     location.pathname.startsWith('/bone');
+                     location.pathname.startsWith('/bone') ||
+                     location.pathname.startsWith('/symptom-checker');
+  const hideFooter = hideNavbar || location.pathname.startsWith('/symptom-checker');
+  const isSymptomChecker = location.pathname.startsWith('/symptom-checker');
 
   return (
     <div className="d-flex flex-column min-vh-100" style={{
-      background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
+      background: isSymptomChecker ? '#ffffff' : 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
       minHeight: '100vh'
     }}>
       {!hideNavbar && <Navbar onlyModels={showOnlyModelsButton} />}
-      <main className="flex-fill page-transition" style={{ paddingTop: hideNavbar ? '0' : '80px' }}>
+      <main
+        className="flex-fill page-transition"
+        style={{
+          paddingTop: hideNavbar ? '0' : '80px',
+          background: isSymptomChecker ? '#ffffff' : 'transparent'
+        }}
+      >
         <Routes>
           <Route path="/" element={<HomeAnimated />} />
           <Route path="/auth" element={<Auth />} />
@@ -98,7 +107,7 @@ function AppContent() {
           <Route path="/contact" element={<Container className="py-4"><ContactAnimated /></Container>} />
         </Routes>
       </main>
-      {!hideNavbar && <Footer />}
+      {!hideFooter && <Footer />}
       <Chatbot />
     </div>
   );

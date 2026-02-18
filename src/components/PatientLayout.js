@@ -2,7 +2,21 @@ import React, { useState } from 'react';
 import { useNavigate, Outlet } from 'react-router-dom';
 import { Navbar, Nav, Button, Container, Offcanvas, Badge, Dropdown, ListGroup } from 'react-bootstrap';
 import { useAuth } from '../context/AuthContext';
-import { Home, Activity, Salad, Hospital, UserRound, FileText, Menu, User, Settings, LogOut, Bell } from 'lucide-react';
+import {
+  Home,
+  Activity,
+  HeartPulse,
+  Brain,
+  Hospital,
+  UserRound,
+  FileText,
+  Menu,
+  User,
+  Settings,
+  LogOut,
+  Bell,
+  Stethoscope
+} from 'lucide-react';
 
 const PatientLayout = () => {
   const { user, logout } = useAuth();
@@ -27,11 +41,11 @@ const PatientLayout = () => {
   };
 
   const features = [
-    { name: 'Diagnostic Models', path: '/models', icon: Activity, desc: 'Disease prediction models', color: '#000000' },
-    { name: 'NutriMind', path: '/assistant', icon: Salad, desc: 'AI nutrition assistant', color: '#000000' },
-    { name: 'Hospital Finder', path: '/hospital-finder', icon: Hospital, desc: 'Find nearby hospitals', color: '#000000' },
-    { name: 'Nearby Doctors', path: '/meet-doctor', icon: UserRound, desc: 'Connect with doctors', color: '#000000' },
-    { name: 'Report Analyzer', path: '/report-analyzer', icon: FileText, desc: 'Analyze medical reports', color: '#000000' }
+    { name: 'Diagnostic Models', path: '/models', icon: HeartPulse, desc: 'Multi-disease AI predictions', color: '#00695C' },
+    { name: 'NutriMind', path: '/assistant', icon: Brain, desc: 'AI-powered nutrition guidance', color: '#00695C' },
+    { name: 'Hospital Finder', path: '/hospital-finder', icon: Hospital, desc: 'Locate nearby hospitals', color: '#00695C' },
+    { name: 'Nearby Doctors', path: '/meet-doctor', icon: UserRound, desc: 'Connect with specialists', color: '#00695C' },
+    { name: 'Report Analyzer', path: '/report-analyzer', icon: FileText, desc: 'Scan & summarize reports', color: '#00695C' }
   ];
 
   const handleLogout = () => {
@@ -140,51 +154,135 @@ const PatientLayout = () => {
       </Navbar>
 
       <Offcanvas show={showMenu} onHide={() => setShowMenu(false)} placement="start">
-        <Offcanvas.Header closeButton style={{ background: 'linear-gradient(135deg, #00695C 0%, #00897B 100%)', color: 'white' }}>
-          <Offcanvas.Title className="fw-bold">Patient Menu</Offcanvas.Title>
+        <Offcanvas.Header
+          closeButton
+          style={{
+            background: 'linear-gradient(135deg, #00695C 0%, #00897B 100%)',
+            color: 'white',
+            borderBottom: '1px solid rgba(255,255,255,0.25)'
+          }}
+        >
+          <Offcanvas.Title className="fw-bold d-flex align-items-center gap-2">
+            <Stethoscope size={20} />
+            <span>Patient Menu</span>
+          </Offcanvas.Title>
         </Offcanvas.Header>
-        <Offcanvas.Body className="p-0" style={{ display: 'flex', flexDirection: 'column' }}>
+        <Offcanvas.Body
+          className="p-0"
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            background: 'linear-gradient(180deg, #f4fbf9 0%, #ffffff 40%, #edf4ff 100%)'
+          }}
+        >
           <div
             onClick={() => handleNavigate('/patient-dashboard')}
             style={{
-              padding: '20px',
-              borderBottom: '1px solid #eee',
+              padding: '20px 22px',
+              borderBottom: '1px solid #e0e7ff',
               cursor: 'pointer',
               transition: 'all 0.3s',
-              background: '#f8f9fa'
+              background: 'linear-gradient(135deg, #f0fdfa 0%, #e0f2fe 60%, #eff6ff 100%)',
+              boxShadow: '0 8px 18px rgba(15,23,42,0.06)',
+              position: 'relative',
+              overflow: 'hidden'
             }}
           >
             <div className="d-flex align-items-center">
-              <div style={{ marginRight: '15px' }}>
-                <Home size={32} color="#000000" />
+              <div
+                style={{
+                  marginRight: '16px',
+                  width: '42px',
+                  height: '42px',
+                  borderRadius: '14px',
+                  background: 'linear-gradient(135deg, #0f766e 0%, #14b8a6 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 8px 18px rgba(15,118,110,0.35)'
+                }}
+              >
+                <Home size={24} color="#ffffff" />
               </div>
               <div>
-                <div style={{ fontSize: '0.95rem', fontWeight: 600, color: '#1976d2' }}>Dashboard</div>
-                <small style={{ fontSize: '0.75rem' }} className="text-muted">Back to home</small>
+                <div style={{ fontSize: '0.98rem', fontWeight: 700, color: '#0f172a' }}>Dashboard</div>
+                <small style={{ fontSize: '0.78rem', color: '#475569' }}>Live health overview</small>
               </div>
             </div>
+            <svg
+              viewBox="0 0 280 40"
+              style={{
+                position: 'absolute',
+                bottom: 4,
+                left: 18,
+                right: 18,
+                height: '28px',
+                opacity: 0.45,
+                filter: 'drop-shadow(0 0 8px rgba(45,212,191,0.45))'
+              }}
+            >
+              <polyline
+                fill="none"
+                stroke="#14b8a6"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                points="0,22 20,22 30,22 40,10 45,32 50,22 60,22 90,22 110,22 120,10 125,32 130,22 150,22 180,22 200,22 210,10 215,32 220,22 240,22 260,22 280,22"
+              >
+                <animate attributeName="stroke-dasharray" from="0,560" to="560,0" dur="2s" repeatCount="indefinite" />
+              </polyline>
+            </svg>
           </div>
           {features.map((feature, index) => (
             <div
               key={index}
               onClick={() => handleNavigate(feature.path)}
               style={{
-                padding: '20px',
-                borderBottom: '1px solid #eee',
+                padding: '18px 22px',
+                borderBottom: '1px solid #edf2ff',
                 cursor: 'pointer',
-                transition: 'all 0.3s'
+                transition: 'all 0.3s',
+                background: 'transparent'
               }}
-              onMouseEnter={(e) => e.currentTarget.style.background = '#f8f9fa'}
-              onMouseLeave={(e) => e.currentTarget.style.background = 'white'}
+              onMouseEnter={(e) => { e.currentTarget.style.background = '#f8fafc'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
             >
-              <div className="d-flex align-items-center">
-                <div style={{ marginRight: '15px' }}>
-                  <feature.icon size={32} color={feature.color} />
+              <div className="d-flex align-items-center justify-content-between">
+                <div className="d-flex align-items-center">
+                  <div
+                    style={{
+                      marginRight: '16px',
+                      width: '38px',
+                      height: '38px',
+                      borderRadius: '12px',
+                      background: 'rgba(15,118,110,0.06)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                  >
+                    <feature.icon size={22} color={feature.color} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.94rem', fontWeight: 600, color: '#0f172a' }}>{feature.name}</div>
+                    <small style={{ fontSize: '0.76rem', color: '#64748b' }}>{feature.desc}</small>
+                  </div>
                 </div>
-                <div>
-                  <div style={{ fontSize: '0.95rem', fontWeight: 600, color: '#1976d2' }}>{feature.name}</div>
-                  <small style={{ fontSize: '0.75rem', color: '#000000' }}>{feature.desc}</small>
-                </div>
+                {index === 0 && (
+                  <div
+                    style={{
+                      fontSize: '0.68rem',
+                      fontWeight: 700,
+                      color: '#0f766e',
+                      padding: '4px 10px',
+                      borderRadius: '999px',
+                      background: 'rgba(34,197,94,0.10)',
+                      border: '1px solid rgba(34,197,94,0.35)'
+                    }}
+                  >
+                    Live
+                  </div>
+                )}
               </div>
             </div>
           ))}

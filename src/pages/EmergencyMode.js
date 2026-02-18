@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Container, Button, Card, Alert, Spinner } from 'react-bootstrap';
 import { FaAmbulance, FaPhone, FaMapMarkerAlt, FaDirections, FaExclamationTriangle } from 'react-icons/fa';
+import { Phone } from 'lucide-react';
 
 const EmergencyMode = () => {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [location, setLocation] = useState(null);
   const [nearestHospital, setNearestHospital] = useState(null);
@@ -127,22 +130,57 @@ const EmergencyMode = () => {
   }, []);
 
   return (
-    <Container className="py-5" style={{ marginTop: '80px', minHeight: '100vh' }}>
+    <div style={{ background: '#f9fafb', minHeight: '100vh', position: 'relative', overflow: 'hidden' }}>
+      <Container className="py-5" style={{ marginTop: '40px', minHeight: '100vh', maxWidth: '960px' }}>
       {/* Emergency Header */}
-      <div className="text-center mb-4">
-        <div style={{
-          display: 'inline-block',
-          padding: '20px',
-          borderRadius: '50%',
-          background: 'linear-gradient(135deg, #ff4444 0%, #cc0000 100%)',
-          boxShadow: '0 0 30px rgba(255, 68, 68, 0.6)',
-          animation: 'pulse 2s infinite',
-          marginBottom: '20px'
-        }}>
-          <FaAmbulance style={{ fontSize: '3rem', color: 'white' }} />
+      <div
+        style={{
+          marginBottom: '24px',
+          padding: '16px 20px',
+          borderRadius: '12px',
+          backgroundColor: '#fee2e2',
+          border: '1px solid #fecaca',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px'
+        }}
+      >
+        <div
+          style={{
+            width: '40px',
+            height: '40px',
+            borderRadius: '999px',
+            backgroundColor: '#ef4444',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+        >
+          <FaAmbulance style={{ fontSize: '1.4rem', color: 'white' }} />
         </div>
-        <h1 style={{ color: '#ff4444', fontWeight: 'bold' }}>EMERGENCY MODE</h1>
-        <p className="text-muted">Quick access to emergency services</p>
+        <div>
+          <h1
+            style={{
+              margin: 0,
+              fontSize: '1.4rem',
+              fontWeight: 800,
+              letterSpacing: '0.08em',
+              color: '#b91c1c'
+            }}
+          >
+            EMERGENCY MODE
+          </h1>
+          <p
+            style={{
+              margin: 0,
+              marginTop: '2px',
+              fontSize: '0.9rem',
+              color: '#4b5563'
+            }}
+          >
+            Quick access to critical contacts and your nearest emergency hospital.
+          </p>
+        </div>
       </div>
 
       {/* Emergency Contacts */}
@@ -262,7 +300,8 @@ const EmergencyMode = () => {
         <strong>Disclaimer:</strong> This system assists in locating emergency services but does not directly dispatch ambulances. 
         In case of a life-threatening emergency, call {EMERGENCY_CONTACTS.ambulance} immediately.
       </Alert>
-    </Container>
+      </Container>
+    </div>
   );
 };
 

@@ -1,5 +1,4 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 
 const AuthContext = createContext();
 
@@ -10,14 +9,23 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check session with backend on mount
+    // Hydrate from localStorage first for hard refreshes
+    try {
+      const stored = localStorage.getItem('healthai_user');
+      if (stored) {
+        setUser(JSON.parse(stored));
+      }
+    } catch (_) {}
+
+    // Then verify session with backend (non-blocking for UI already showing)
     fetch('http://localhost:5000/api/auth/me', {
       credentials: 'include'
     })
-      .then(res => res.json())
+      .then(res => res.ok ? res.json() : null)
       .then(data => {
-        if (data.user) {
+        if (data && data.user) {
           setUser(data.user);
+          localStorage.setItem('healthai_user', JSON.stringify(data.user));
         }
       })
       .catch(() => {})
@@ -26,6 +34,9 @@ export const AuthProvider = ({ children }) => {
 
   const login = (userData) => {
     setUser(userData);
+    try {
+      localStorage.setItem('healthai_user', JSON.stringify(userData));
+    } catch (_) {}
   };
 
   const logout = async () => {
@@ -38,6 +49,9 @@ export const AuthProvider = ({ children }) => {
       console.error('Logout error:', error);
     }
     setUser(null);
+    try {
+      localStorage.removeItem('healthai_user');
+    } catch (_) {}
     window.location.href = '/';
   };
 

@@ -309,39 +309,269 @@ const DiabetesForm = () => {
             {result && (
               <Fade in timeout={500}>
                 <Box sx={{ width: '100%' }}>
-                  <ResultAlert
-                    severity={result.risk_level === "High Risk" ? "error" : "success"}
-                    sx={{
-                      backgroundColor: result.risk_level === "Low Risk" ? '#d4edda' : '#f8d7da',
-                      color: '#000',
-                      '& .MuiAlert-icon': {
-                        color: result.risk_level === "Low Risk" ? '#155724' : '#721c24',
-                      },
-                    }}
-                  >
-                    <Typography variant="h6" sx={{ color: 'black', mb: 1 }}>
-                      {result.message}
-                    </Typography>
-                    <Typography sx={{ color: 'black', mb: 0.5 }}>
-                      Risk Level: {result.risk_level}
-                    </Typography>
-                    <Typography sx={{ color: 'black' }}>
-                      Probability: {(result.probability * 100).toFixed(2)}%
-                    </Typography>
-                    {result.disclaimer && (
-                      <Typography sx={{ color: 'black', fontSize: '0.8rem', mt: 1, fontStyle: 'italic' }}>
-                        {result.disclaimer}
-                      </Typography>
-                    )}
-                  </ResultAlert>
+                  {/* Structured hospital-style report */}
+                  {(() => {
+                    const probPercent = (result.probability * 100).toFixed(1);
+                    const riskLower = (result.risk_level || '').toLowerCase();
+                    const riskCategory =
+                      riskLower.includes('high') ? 'high' :
+                      riskLower.includes('moderate') ? 'moderate' : 'low';
+
+                    const factorsByRisk = {
+                      high: [
+                        'Elevated glucose levels',
+                        'Body Mass Index in overweight/obese range',
+                        'Blood pressure above normal range'
+                      ],
+                      moderate: [
+                        'Borderline glucose levels',
+                        'Slightly elevated BMI',
+                        'Early changes in blood pressure'
+                      ],
+                      low: [
+                        'Glucose levels within normal range',
+                        'BMI in a healthy range',
+                        'Blood pressure within target range'
+                      ]
+                    };
+
+                    const recommendationsByRisk = {
+                      high: [
+                        'Monitor blood glucose daily and maintain a log',
+                        'Shift to a low-sugar, low-refined-carbohydrate diet',
+                        'Engage in at least 30 minutes of moderate exercise daily',
+                        'Consult an endocrinologist within the next 2–4 weeks'
+                      ],
+                      moderate: [
+                        'Reduce intake of sugary drinks and refined carbohydrates',
+                        'Increase weekly physical activity (150 minutes/week target)',
+                        'Schedule a routine check-up with your primary care physician'
+                      ],
+                      low: [
+                        'Maintain a balanced diet with complex carbohydrates and fiber',
+                        'Continue regular exercise and annual health screening'
+                      ]
+                    };
+
+                    const mealPlansByRisk = {
+                      high: [
+                        'Breakfast: Oatmeal with berries (unsweetened), boiled egg',
+                        'Lunch: Grilled chicken salad, whole grain bread',
+                        'Dinner: Baked fish, steamed vegetables, quinoa',
+                        'Snacks: Nuts, Greek yogurt (unsweetened), fresh fruits'
+                      ],
+                      moderate: [
+                        'Breakfast: Whole grain toast with avocado',
+                        'Lunch: Vegetable soup with brown rice',
+                        'Dinner: Lean protein with mixed vegetables',
+                        'Snacks: Roasted chickpeas, fruit in moderation'
+                      ],
+                      low: [
+                        'Continue balanced meals with complex carbohydrates and vegetables',
+                        'Limit processed foods and sugary snacks'
+                      ]
+                    };
+
+                    const factors = factorsByRisk[riskCategory] || [];
+                    const recs = recommendationsByRisk[riskCategory] || [];
+                    const meals = mealPlansByRisk[riskCategory] || [];
+
+                    return (
+                      <Paper
+                        elevation={0}
+                        sx={{
+                          borderRadius: 3,
+                          border: '1px solid #e5e7eb',
+                          overflow: 'hidden',
+                          mb: 3,
+                          bgcolor: '#ffffff'
+                        }}
+                      >
+                        {/* Header */}
+                        <Box
+                          sx={{
+                            px: 3,
+                            py: 2,
+                            borderBottom: '1px solid #e5e7eb',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            bgcolor: '#f5f5f5'
+                          }}
+                        >
+                          <Box>
+                            <Typography variant="h6" fontWeight={800}>
+                              HealthAI Smart Healthcare System
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              AI-Assisted Diabetes Risk Assessment Report
+                            </Typography>
+                          </Box>
+                          <Box sx={{ textAlign: 'right', fontSize: '0.8rem', color: 'text.secondary' }}>
+                            <Typography>Date: {new Date().toLocaleDateString()}</Typography>
+                            <Typography>
+                              ID: {`RPT-${Date.now().toString(36).toUpperCase()}`}
+                            </Typography>
+                          </Box>
+                        </Box>
+
+                        <Box sx={{ p: 3 }}>
+                          {/* Patient information */}
+                          <Typography
+                            variant="subtitle2"
+                            sx={{ fontWeight: 700, mb: 1, letterSpacing: 0.08 }}
+                          >
+                            PATIENT INFORMATION
+                          </Typography>
+                          <Grid container spacing={2} sx={{ mb: 2 }}>
+                            <Grid item xs={12} sm={4}>
+                              <Typography variant="body2">
+                                <strong>Name:</strong> Not Provided
+                              </Typography>
+                            </Grid>
+                            <Grid item xs={6} sm={4}>
+                              <Typography variant="body2">
+                                <strong>Age:</strong> {formData.age || 'Not Provided'}
+                              </Typography>
+                            </Grid>
+                            <Grid item xs={6} sm={4}>
+                              <Typography variant="body2">
+                                <strong>Gender:</strong> Not Provided
+                              </Typography>
+                            </Grid>
+                          </Grid>
+
+                          {/* Key clinical parameters */}
+                          <Typography
+                            variant="subtitle2"
+                            sx={{ fontWeight: 700, mb: 1, letterSpacing: 0.08 }}
+                          >
+                            KEY CLINICAL PARAMETERS
+                          </Typography>
+                          <Grid container spacing={1.2} sx={{ mb: 3 }}>
+                            <Grid item xs={12} sm={6}>
+                              <Typography variant="body2">
+                                Glucose Level: <strong>{formData.glucose}</strong> mg/dL
+                              </Typography>
+                              <Typography variant="body2">
+                                BMI: <strong>{formData.bmi}</strong>
+                              </Typography>
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                              <Typography variant="body2">
+                                Blood Pressure: <strong>{formData.blood_pressure}</strong> mm Hg
+                              </Typography>
+                              <Typography variant="body2">
+                                Age: <strong>{formData.age}</strong> years
+                              </Typography>
+                            </Grid>
+                          </Grid>
+
+                          {/* Risk assessment band */}
+                          <Box
+                            sx={{
+                              borderRadius: 1.5,
+                              bgcolor:
+                                riskCategory === 'high'
+                                  ? '#b91c1c'
+                                  : riskCategory === 'moderate'
+                                  ? '#d97706'
+                                  : '#15803d',
+                              color: 'white',
+                              px: 2.5,
+                              py: 1.5,
+                              mb: 3,
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center'
+                            }}
+                          >
+                            <Box>
+                              <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                                RISK ASSESSMENT
+                              </Typography>
+                              <Typography variant="body2">
+                                Assessment: <strong>{result.risk_level}</strong>
+                              </Typography>
+                            </Box>
+                            <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                              Confidence: {probPercent}%
+                            </Typography>
+                          </Box>
+
+                          {/* Key contributing factors */}
+                          <Typography
+                            variant="subtitle2"
+                            sx={{ fontWeight: 700, mb: 0.5, letterSpacing: 0.08 }}
+                          >
+                            KEY CONTRIBUTING FACTORS
+                          </Typography>
+                          <Box component="ul" sx={{ mt: 0, mb: 2, pl: 3 }}>
+                            {factors.map((item) => (
+                              <li key={item}>
+                                <Typography variant="body2">{item}</Typography>
+                              </li>
+                            ))}
+                          </Box>
+
+                          {/* Personalized recommendations */}
+                          <Typography
+                            variant="subtitle2"
+                            sx={{ fontWeight: 700, mb: 0.5, letterSpacing: 0.08 }}
+                          >
+                            PERSONALIZED RECOMMENDATIONS
+                          </Typography>
+                          <Box component="ul" sx={{ mt: 0, mb: 2, pl: 3 }}>
+                            {recs.map((item) => (
+                              <li key={item}>
+                                <Typography variant="body2">{item}</Typography>
+                              </li>
+                            ))}
+                          </Box>
+
+                          {/* Recommended meal plan */}
+                          {meals.length > 0 && (
+                            <>
+                              <Typography
+                                variant="subtitle2"
+                                sx={{ fontWeight: 700, mb: 0.5, letterSpacing: 0.08 }}
+                              >
+                                RECOMMENDED MEAL PLAN
+                              </Typography>
+                              <Box component="ul" sx={{ mt: 0, mb: 2, pl: 3 }}>
+                                {meals.map((item) => (
+                                  <li key={item}>
+                                    <Typography variant="body2">{item}</Typography>
+                                  </li>
+                                ))}
+                              </Box>
+                            </>
+                          )}
+
+                          {result.disclaimer && (
+                            <Typography
+                              sx={{
+                                mt: 2,
+                                fontSize: '0.8rem',
+                                fontStyle: 'italic',
+                                color: 'text.secondary'
+                              }}
+                            >
+                              {result.disclaimer}
+                            </Typography>
+                          )}
+                        </Box>
+                      </Paper>
+                    );
+                  })()}
 
                   <DownloadButton
                     variant="outlined"
                     startIcon={<DownloadIcon />}
                     onClick={() => generateMedicalReport('diabetes', formData, result)}
-                    sx={{ mt: 2, minWidth: 200 }}
+                    sx={{ mt: 1.5, minWidth: 200 }}
                   >
-                    Download Medical Report
+                    Download Medical Report (PDF)
                   </DownloadButton>
 
                   {hospitals.length > 0 && (

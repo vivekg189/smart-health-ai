@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Bot } from 'lucide-react';
 import config from '../config';
 
 const Chatbot = () => {
@@ -78,12 +79,14 @@ const Chatbot = () => {
             color: 'white',
             border: 'none',
             boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
-            fontSize: 32,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
             zIndex: 1000
           }}
           aria-label="Open chatbot"
         >
-          🤖
+          <Bot size={30} />
         </button>
       )}
       {/* Chat Window */}
@@ -109,18 +112,32 @@ const Chatbot = () => {
           </div>
           <div style={{ flex: 1, padding: 12, overflowY: 'auto', background: '#f9f9f9' }}>
             {messages.map((msg, idx) => (
-              <div key={idx} style={{ textAlign: msg.from === 'user' ? 'right' : 'left', margin: '8px 0' }}>
-                <span style={{
-                  display: 'inline-block',
-                  background: msg.from === 'user' ? '#0066cc' : '#e5e7eb',
-                  color: msg.from === 'user' ? 'white' : '#111',
-                  borderRadius: 12,
-                  padding: '8px 12px',
-                  maxWidth: '80%',
-                  wordBreak: 'break-word',
-                  whiteSpace: 'pre-wrap',
-                  textAlign: 'left'
-                }}>{msg.text}</span>
+              <div
+                key={idx}
+                style={{
+                  textAlign: msg.from === 'user' ? 'right' : 'left',
+                  margin: '8px 0'
+                }}
+              >
+                <span
+                  style={{
+                    display: 'inline-block',
+                    background: msg.from === 'user' ? '#0066cc' : '#e5e7eb',
+                    color: msg.from === 'user' ? 'white' : '#111',
+                    borderRadius: 12,
+                    padding: '8px 12px',
+                    maxWidth: '80%',
+                    wordBreak: 'break-word',
+                    textAlign: 'left'
+                  }}
+                >
+                  {msg.text.split('\n').map((line, i) => (
+                    <React.Fragment key={i}>
+                      {line}
+                      {i !== msg.text.split('\n').length - 1 && <br />}
+                    </React.Fragment>
+                  ))}
+                </span>
               </div>
             ))}
             {loading && (

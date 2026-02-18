@@ -16,27 +16,37 @@ import {
   DialogContent,
   Divider,
   LinearProgress,
-  Paper
+  Paper,
+  Tabs,
+  Tab,
+  Stack,
+  Switch,
+  Tooltip,
+  IconButton
 } from '@mui/material';
 import {
   Video,
   Calendar,
   CheckCircle,
-  X,
   FileText,
   TrendingUp,
   Heart,
-  Hospital,
   Star,
   User,
   Clock,
   AlertTriangle,
-  TrendingDown,
   Activity,
   Brain,
   ArrowUp,
   ArrowDown,
-  Minus
+  Minus,
+  Copy,
+  Shield,
+  Sparkles,
+  Route,
+  Stethoscope,
+  Siren,
+  Info
 } from 'lucide-react';
 import { styled } from '@mui/material/styles';
 import { Line } from 'react-chartjs-2';
@@ -47,7 +57,7 @@ import {
   PointElement,
   LineElement,
   Title,
-  Tooltip,
+  Tooltip as ChartTooltip,
   Legend,
   Filler
 } from 'chart.js';
@@ -60,7 +70,7 @@ ChartJS.register(
   PointElement,
   LineElement,
   Title,
-  Tooltip,
+  ChartTooltip,
   Legend,
   Filler
 );
@@ -71,6 +81,20 @@ const StyledCard = styled(Card)(({ theme }) => ({
   transition: 'transform 0.2s',
   '&:hover': {
     transform: 'translateY(-4px)',
+  },
+}));
+
+const GlassCard = styled(Card)(({ theme }) => ({
+  borderRadius: theme.spacing(2.5),
+  background: 'rgba(255, 255, 255, 0.78)',
+  backdropFilter: 'blur(14px)',
+  border: '1px solid rgba(77, 182, 172, 0.18)',
+  boxShadow: '0 10px 30px rgba(15, 23, 42, 0.08)',
+  overflow: 'hidden',
+  transition: 'transform 180ms ease, box-shadow 180ms ease',
+  '&:hover': {
+    transform: 'translateY(-4px)',
+    boxShadow: '0 18px 50px rgba(15, 23, 42, 0.12)',
   },
 }));
 
@@ -93,12 +117,13 @@ const PatientDashboard = () => {
   const [activeCall, setActiveCall] = useState(null);
   const [prescriptionModal, setPrescriptionModal] = useState(null);
   const [userName, setUserName] = useState('');
-  const [userLocation, setUserLocation] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
   const [healthTrends, setHealthTrends] = useState(null);
   const [riskForecasts, setRiskForecasts] = useState([]);
   const [aiInsights, setAiInsights] = useState([]);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [privacyMode, setPrivacyMode] = useState(true);
+  const [briefCopied, setBriefCopied] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -106,7 +131,6 @@ const PatientDashboard = () => {
     fetchUserProfile();
     fetchPredictions();
     fetchDoctors();
-    fetchHealthAnalytics();
   }, []);
 
   const fetchUserProfile = async () => {
@@ -184,19 +208,106 @@ const PatientDashboard = () => {
     }
   };
 
-  const getUserLocation = () => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setUserLocation({
-            lat: position.coords.latitude,
-            lon: position.coords.longitude
-          });
-        },
-        (error) => console.error('Location error:', error)
-      );
+  // Derive AI analytics directly from recent predictions so cards stay in sync
+  useEffect(() => {
+    if (!predictions || predictions.length === 0) {
+      setHealthTrends(null);
+      setRiskForecasts([]);
+      setAiInsights([]);
+      return;
     }
-  };
+
+    setAnalyticsLoading(true);
+
+    // Sort predictions by created_at (desc)
+    const sorted = [...predictions].sort((a, b) => {
+      const da = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const db = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return db - da;
+    });
+
+    // ---- Health Trends (per disease over time) ----
+    const trendMap = {};
+    sorted.forEach((p) => {
+      const disease = p.disease_type || 'General';
+      const createdAt = p.created_at || new Date().toISOString();
+      const risk = getRiskPercentage(p.risk_level);
+      if (!trendMap[disease]) trendMap[disease] = [];
+      trendMap[disease].push({ date: createdAt, risk });
+    });
+    setHealthTrends(trendMap);
+
+    // ---- Future Risk Forecasting (simple delta between last two points) ----
+    const forecasts = Object.entries(trendMap)
+      .map(([disease, entries]) => {
+        if (entries.length < 2) return null;
+        const sortedEntries = [...entries].sort(
+          (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+        );
+        const previous = sortedEntries[sortedEntries.length - 2];
+        const current = sortedEntries[sortedEntries.length - 1];
+        const change = current.risk - previous.risk;
+
+        let trend = 'stable';
+        if (change > 3) trend = 'increasing';
+        else if (change < -3) trend = 'decreasing';
+
+        let warning;
+        if (trend === 'increasing') {
+          warning = `Risk for ${disease} is trending higher. Consider scheduling a follow-up with your doctor.`;
+        } else if (trend === 'decreasing') {
+          warning = `Risk for ${disease} is improving. Continue your current treatment and lifestyle plan.`;
+        } else {
+          warning = `Risk for ${disease} is stable. Maintain regular monitoring and healthy habits.`;
+        }
+
+        return {
+          disease,
+          trend,
+          change,
+          current_risk: current.risk,
+          previous_risk: previous.risk,
+          warning
+        };
+      })
+      .filter(Boolean);
+
+    setRiskForecasts(forecasts);
+
+    // ---- AI Health Copilot Insights ----
+    const insights = sorted.slice(0, 4).map((p) => {
+      const disease = p.disease_type || 'Health';
+      const riskLevel = p.risk_level || 'Normal';
+      const perc = getRiskPercentage(p.risk_level);
+      const lower = riskLevel.toLowerCase();
+
+      let type = 'info';
+      if (lower.includes('high')) type = 'critical';
+      else if (lower.includes('moderate')) type = 'warning';
+      else if (lower.includes('low')) type = 'success';
+
+      let action;
+      if (type === 'critical') {
+        action = 'Book an appointment within 1–2 weeks';
+      } else if (type === 'warning') {
+        action = 'Discuss results at your next routine visit';
+      } else {
+        action = 'Maintain current lifestyle and continue routine screening';
+      }
+
+      const message = `${disease}: ${riskLevel} risk (${perc}%) based on your latest assessment.`;
+
+      return {
+        disease,
+        type,
+        message,
+        action
+      };
+    });
+
+    setAiInsights(insights);
+    setAnalyticsLoading(false);
+  }, [predictions]);
 
   const fetchDoctors = async () => {
     try {
@@ -258,6 +369,53 @@ const PatientDashboard = () => {
     return 25;
   };
 
+  const mask = (value) => (privacyMode ? '•••' : value);
+
+  const getNextAppointment = () => {
+    const upcoming = appointments
+      .filter(a => ['accepted', 'pending'].includes(a.status))
+      .map(a => ({ ...a, dateTime: new Date(`${a.appointment_date}T${a.appointment_time}`) }))
+      .filter(a => !Number.isNaN(a.dateTime.getTime()) && a.dateTime > new Date())
+      .sort((a, b) => a.dateTime - b.dateTime);
+    return upcoming[0] || null;
+  };
+
+  const getHealthScore = () => {
+    if (!predictions || predictions.length === 0) return 92;
+    const recent = predictions.slice(0, 6);
+    const avgRisk = recent.reduce((acc, p) => acc + getRiskPercentage(p.risk_level), 0) / recent.length;
+    return Math.round(Math.max(35, Math.min(99, 100 - avgRisk * 0.7)));
+  };
+
+  const buildHealthBrief = () => {
+    const next = getNextAppointment();
+    const topPred = predictions?.[0];
+    const score = getHealthScore();
+    const lines = [
+      'HealthAI — Patient Brief',
+      `Name: ${userName || 'Patient'}`,
+      `Health Score: ${score}/100`,
+      next
+        ? `Next appointment: Dr. ${next.doctor_name} on ${new Date(next.appointment_date).toLocaleDateString()} at ${next.appointment_time} (${next.status})`
+        : 'Next appointment: none scheduled',
+      topPred
+        ? `Latest assessment: ${topPred.disease_type} — ${topPred.risk_level || 'Normal'} (${getRiskPercentage(topPred.risk_level)}%)`
+        : 'Latest assessment: none',
+      `Generated: ${new Date().toLocaleString()}`
+    ];
+    return lines.join('\n');
+  };
+
+  const copyBrief = async () => {
+    try {
+      await navigator.clipboard.writeText(buildHealthBrief());
+      setBriefCopied(true);
+      window.setTimeout(() => setBriefCopied(false), 1400);
+    } catch (e) {
+      console.error('Clipboard error:', e);
+    }
+  };
+
   if (activeCall) {
     return (
       <VideoCallRoom
@@ -269,32 +427,190 @@ const PatientDashboard = () => {
   }
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" fontWeight={700} gutterBottom>
-          Patient Dashboard
-        </Typography>
-        <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
-          <Button
-            variant={activeTab === 'overview' ? 'contained' : 'outlined'}
-            onClick={() => setActiveTab('overview')}
-          >
-            Overview
-          </Button>
-          <Button
-            variant={activeTab === 'appointments' ? 'contained' : 'outlined'}
-            onClick={() => setActiveTab('appointments')}
-          >
-            My Appointments
-          </Button>
-          <Button
-            variant={activeTab === 'doctors' ? 'contained' : 'outlined'}
-            onClick={() => setActiveTab('doctors')}
-          >
-            Meet My Doctors
-          </Button>
-        </Box>
-      </Box>
+    <Box
+      sx={{
+        minHeight: 'calc(100vh - 80px)',
+        background: 'linear-gradient(180deg, #ffffff 0%, #f3fbf9 35%, #eef7fb 100%)',
+        py: { xs: 2.5, md: 4 },
+        position: 'relative',
+        overflow: 'hidden'
+      }}
+    >
+      {/* Decorative blobs to match landing page */}
+      <Box
+        sx={{
+          position: 'absolute',
+          inset: 0,
+          pointerEvents: 'none',
+          '&:before, &:after': {
+            content: '""',
+            position: 'absolute',
+            width: 420,
+            height: 420,
+            borderRadius: '50%',
+            filter: 'blur(55px)',
+            opacity: 0.22
+          },
+          '&:before': {
+            top: -120,
+            right: -140,
+            background:
+              'radial-gradient(circle, rgba(77,182,172,0.9) 0%, rgba(77,182,172,0) 70%)'
+          },
+          '&:after': {
+            bottom: -160,
+            left: -170,
+            background:
+              'radial-gradient(circle, rgba(14,165,233,0.8) 0%, rgba(14,165,233,0) 70%)'
+          }
+        }}
+      />
+
+      <Container maxWidth="xl" sx={{ position: 'relative' }}>
+        <GlassCard
+          sx={{
+            mb: 3,
+            background:
+              'linear-gradient(135deg, rgba(30, 41, 59, 0.92) 0%, rgba(46, 125, 111, 0.92) 45%, rgba(77, 182, 172, 0.88) 100%)',
+            border: '1px solid rgba(255,255,255,0.18)',
+            boxShadow: '0 22px 65px rgba(15, 23, 42, 0.22)'
+          }}
+        >
+          <CardContent sx={{ p: { xs: 2.5, md: 3.5 } }}>
+            <Stack
+              direction={{ xs: 'column', md: 'row' }}
+              spacing={2.5}
+              alignItems={{ xs: 'flex-start', md: 'center' }}
+              justifyContent="space-between"
+            >
+              <Box>
+                <Stack direction="row" spacing={1.2} alignItems="center" sx={{ mb: 0.8 }}>
+                  <Box
+                    sx={{
+                      width: 42,
+                      height: 42,
+                      borderRadius: 2,
+                      bgcolor: 'rgba(255,255,255,0.14)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      border: '1px solid rgba(255,255,255,0.18)'
+                    }}
+                  >
+                    <Sparkles size={20} color="#E0FAF3" />
+                  </Box>
+                  <Typography sx={{ color: 'rgba(255,255,255,0.85)', fontWeight: 800, letterSpacing: 0.4 }}>
+                    HealthAI Patient Space
+                  </Typography>
+                </Stack>
+                <Typography variant="h4" fontWeight={900} sx={{ color: 'white', lineHeight: 1.1 }}>
+                  Welcome back{userName ? `, ${userName}` : ''}.
+                </Typography>
+                <Typography sx={{ color: 'rgba(255,255,255,0.82)', mt: 1, maxWidth: 760 }}>
+                  A calmer, smarter dashboard: privacy-first snapshots, AI guidance, and your care journey in one place.
+                </Typography>
+              </Box>
+
+              <Stack
+                direction={{ xs: 'column', sm: 'row' }}
+                spacing={1.3}
+                alignItems={{ xs: 'flex-start', sm: 'center' }}
+              >
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  alignItems="center"
+                  sx={{
+                    px: 1.2,
+                    py: 0.8,
+                    borderRadius: 2,
+                    bgcolor: 'rgba(255,255,255,0.14)',
+                    border: '1px solid rgba(255,255,255,0.18)'
+                  }}
+                >
+                  <Shield size={18} color="#E0FAF3" />
+                  <Typography sx={{ color: 'rgba(255,255,255,0.9)', fontWeight: 800, fontSize: '0.92rem' }}>
+                    Privacy Lens
+                  </Typography>
+                  <Tooltip title={privacyMode ? 'Sensitive values are hidden' : 'Sensitive values are visible'}>
+                    <Switch
+                      size="small"
+                      checked={privacyMode}
+                      onChange={(e) => setPrivacyMode(e.target.checked)}
+                      sx={{
+                        ml: 0.5,
+                        '& .MuiSwitch-switchBase.Mui-checked': { color: '#E0FAF3' },
+                        '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                          bgcolor: 'rgba(224,250,243,0.5)'
+                        }
+                      }}
+                    />
+                  </Tooltip>
+                </Stack>
+
+                <Button
+                  variant="contained"
+                  onClick={() => navigate('/models')}
+                  startIcon={<Activity size={18} />}
+                  sx={{
+                    bgcolor: 'rgba(255,255,255,0.92)',
+                    color: '#1e293b',
+                    fontWeight: 900,
+                    borderRadius: 999,
+                    px: 2.2,
+                    '&:hover': { bgcolor: 'white' }
+                  }}
+                >
+                  Run Assessment
+                </Button>
+                <Button
+                  variant="outlined"
+                  onClick={() => navigate('/emergency')}
+                  startIcon={<Siren size={18} />}
+                  sx={{
+                    borderColor: 'rgba(255,255,255,0.55)',
+                    color: 'white',
+                    fontWeight: 900,
+                    borderRadius: 999,
+                    px: 2.2,
+                    '&:hover': {
+                      borderColor: 'rgba(255,255,255,0.9)',
+                      bgcolor: 'rgba(255,255,255,0.10)'
+                    }
+                  }}
+                >
+                  Emergency
+                </Button>
+              </Stack>
+            </Stack>
+          </CardContent>
+        </GlassCard>
+
+        <GlassCard sx={{ mb: 3 }}>
+          <CardContent sx={{ p: { xs: 1.3, md: 1.8 } }}>
+            <Tabs
+              value={activeTab}
+              onChange={(_, v) => setActiveTab(v)}
+              variant="scrollable"
+              scrollButtons="auto"
+              sx={{
+                minHeight: 44,
+                '& .MuiTabs-indicator': { height: 4, borderRadius: 99, bgcolor: '#4DB6AC' },
+                '& .MuiTab-root': {
+                  textTransform: 'none',
+                  minHeight: 44,
+                  fontWeight: 900,
+                  borderRadius: 99,
+                  px: 2.2
+                }
+              }}
+            >
+              <Tab value="overview" label="Overview" />
+              <Tab value="appointments" label="My Appointments" />
+              <Tab value="doctors" label="Meet My Doctors" />
+            </Tabs>
+          </CardContent>
+        </GlassCard>
 
       {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
 
@@ -306,6 +622,304 @@ const PatientDashboard = () => {
         <>
           {activeTab === 'overview' && (
             <Grid container spacing={3}>
+              {/* Signature row: Health score, next appointment, copy brief */}
+              <Grid item xs={12} md={4}>
+                <GlassCard sx={{ height: '100%' }}>
+                  <CardContent sx={{ p: 2.6 }}>
+                    <Stack direction="row" spacing={1.2} alignItems="center" sx={{ mb: 1.2 }}>
+                      <Box
+                        sx={{
+                          width: 42,
+                          height: 42,
+                          borderRadius: 2,
+                          bgcolor: 'rgba(77, 182, 172, 0.12)',
+                          border: '1px solid rgba(77, 182, 172, 0.20)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                      >
+                        <Heart size={20} color="#2E7D6F" />
+                      </Box>
+                      <Box>
+                        <Typography fontWeight={900}>Health Score</Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          A privacy-first snapshot
+                        </Typography>
+                      </Box>
+                    </Stack>
+                    <Stack direction="row" spacing={1.5} alignItems="baseline" sx={{ mt: 1.5 }}>
+                      <Typography variant="h3" fontWeight={950} sx={{ letterSpacing: -1 }}>
+                        {mask(`${getHealthScore()}`)}
+                      </Typography>
+                      <Typography sx={{ color: 'text.secondary', fontWeight: 800 }}>/100</Typography>
+                    </Stack>
+                    <Box sx={{ mt: 2 }}>
+                      <LinearProgress
+                        variant="determinate"
+                        value={getHealthScore()}
+                        sx={{
+                          height: 10,
+                          borderRadius: 99,
+                          bgcolor: 'rgba(15, 23, 42, 0.08)',
+                          '& .MuiLinearProgress-bar': {
+                            borderRadius: 99,
+                            background: 'linear-gradient(90deg, #4DB6AC 0%, #0EA5E9 100%)'
+                          }
+                        }}
+                      />
+                    </Box>
+                    <Typography variant="caption" sx={{ color: 'text.secondary', mt: 1.2, display: 'block' }}>
+                      Tip: keep Privacy Lens on in public spaces.
+                    </Typography>
+                  </CardContent>
+                </GlassCard>
+              </Grid>
+
+              <Grid item xs={12} md={4}>
+                <GlassCard sx={{ height: '100%' }}>
+                  <CardContent sx={{ p: 2.6 }}>
+                    <Stack direction="row" spacing={1.2} alignItems="center" sx={{ mb: 1.2 }}>
+                      <Box
+                        sx={{
+                          width: 42,
+                          height: 42,
+                          borderRadius: 2,
+                          bgcolor: 'rgba(14, 165, 233, 0.10)',
+                          border: '1px solid rgba(14, 165, 233, 0.18)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                      >
+                        <Calendar size={20} color="#0EA5E9" />
+                      </Box>
+                      <Box>
+                        <Typography fontWeight={900}>Next Appointment</Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Your nearest consult window
+                        </Typography>
+                      </Box>
+                    </Stack>
+
+                    {(() => {
+                      const next = getNextAppointment();
+                      if (!next) {
+                        return (
+                          <Alert severity="info" sx={{ mt: 1.2 }}>
+                            No upcoming appointments. Book a video consult with an available doctor.
+                          </Alert>
+                        );
+                      }
+                      const diffMs = next.dateTime - new Date();
+                      const diffHrs = Math.max(0, Math.floor(diffMs / 3600000));
+                      const days = Math.floor(diffHrs / 24);
+                      const hrs = diffHrs % 24;
+                      const countdown = days > 0 ? `${days}d ${hrs}h` : `${hrs}h`;
+
+                      return (
+                        <>
+                          <Typography variant="h6" fontWeight={950} sx={{ mt: 1.4 }}>
+                            Dr. {next.doctor_name}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.3 }}>
+                            {new Date(next.appointment_date).toLocaleDateString()} at {next.appointment_time} ·{' '}
+                            {next.status === 'pending' ? 'Awaiting approval' : 'Confirmed'}
+                          </Typography>
+                          <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1.4 }}>
+                            <Chip
+                              icon={<Clock size={16} />}
+                              label={`Starts in ${countdown}`}
+                              sx={{
+                                fontWeight: 900,
+                                bgcolor: 'rgba(77,182,172,0.12)',
+                                border: '1px solid rgba(77,182,172,0.20)'
+                              }}
+                            />
+                            {next.status === 'accepted' && (
+                              <Button
+                                size="small"
+                                variant="contained"
+                                startIcon={<Video size={16} />}
+                                onClick={() => handleVideoCall(next)}
+                                sx={{
+                                  ml: 'auto',
+                                  borderRadius: 999,
+                                  fontWeight: 950,
+                                  bgcolor: '#2E7D6F',
+                                  '&:hover': { bgcolor: '#25665b' }
+                                }}
+                              >
+                                Join
+                              </Button>
+                            )}
+                          </Stack>
+                        </>
+                      );
+                    })()}
+                  </CardContent>
+                </GlassCard>
+              </Grid>
+
+              <Grid item xs={12} md={4}>
+                <GlassCard sx={{ height: '100%' }}>
+                  <CardContent sx={{ p: 2.6 }}>
+                    <Stack direction="row" spacing={1.2} alignItems="center" sx={{ mb: 1.2 }}>
+                      <Box
+                        sx={{
+                          width: 42,
+                          height: 42,
+                          borderRadius: 2,
+                          bgcolor: 'rgba(245, 158, 11, 0.12)',
+                          border: '1px solid rgba(245, 158, 11, 0.18)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                      >
+                        <FileText size={20} color="#F59E0B" />
+                      </Box>
+                      <Box>
+                        <Typography fontWeight={900}>Health Brief</Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          One-tap summary for doctors
+                        </Typography>
+                      </Box>
+                    </Stack>
+
+                    <Paper
+                      sx={{
+                        p: 1.6,
+                        bgcolor: 'rgba(15,23,42,0.04)',
+                        border: '1px dashed rgba(15,23,42,0.18)',
+                        borderRadius: 2,
+                        minHeight: 92
+                      }}
+                    >
+                      <Typography variant="body2" sx={{ color: 'text.secondary', whiteSpace: 'pre-wrap' }}>
+                        {privacyMode
+                          ? 'Privacy Lens is ON. Copying will still include your real values.'
+                          : 'Ready. Copy your brief and share it securely with your doctor.'}
+                      </Typography>
+                    </Paper>
+
+                    <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1.6 }}>
+                      <Button
+                        variant="contained"
+                        onClick={copyBrief}
+                        startIcon={<Copy size={18} />}
+                        sx={{
+                          borderRadius: 999,
+                          fontWeight: 950,
+                          bgcolor: '#4DB6AC',
+                          '&:hover': { bgcolor: '#3aa89f' }
+                        }}
+                      >
+                        {briefCopied ? 'Copied' : 'Copy Brief'}
+                      </Button>
+                      <Tooltip title="Uses your latest assessment + next appointment (if any)">
+                        <IconButton size="small" sx={{ ml: 'auto' }}>
+                          <Info size={18} />
+                        </IconButton>
+                      </Tooltip>
+                    </Stack>
+                  </CardContent>
+                </GlassCard>
+              </Grid>
+
+              {/* Care Journey Map (unique element) */}
+              <Grid item xs={12}>
+                <GlassCard>
+                  <CardContent sx={{ p: { xs: 2.2, md: 2.8 } }}>
+                    <Stack direction="row" spacing={1.2} alignItems="center" sx={{ mb: 2 }}>
+                      <Box
+                        sx={{
+                          width: 44,
+                          height: 44,
+                          borderRadius: 2,
+                          bgcolor: 'rgba(139, 92, 246, 0.12)',
+                          border: '1px solid rgba(139, 92, 246, 0.18)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                      >
+                        <Route size={20} color="#8B5CF6" />
+                      </Box>
+                      <Box sx={{ flex: 1 }}>
+                        <Typography variant="h6" fontWeight={950}>
+                          Care Journey Map
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          A simple map of where you are today — and what to do next.
+                        </Typography>
+                      </Box>
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        onClick={() => navigate('/meet-doctor')}
+                        startIcon={<Stethoscope size={16} />}
+                        sx={{ borderRadius: 999, fontWeight: 900 }}
+                      >
+                        Find a doctor
+                      </Button>
+                    </Stack>
+
+                    {(() => {
+                      const hasAssessment = predictions.length > 0;
+                      const next = getNextAppointment();
+                      const hasConsult = !!next;
+                      const completed = appointments.some(a => a.status === 'completed');
+                      const step = completed ? 3 : hasConsult ? 2 : hasAssessment ? 1 : 0;
+                      const steps = [
+                        { title: 'Assess', desc: 'Run an AI screening', color: '#4DB6AC' },
+                        { title: 'Review', desc: 'Read your AI insights', color: '#0EA5E9' },
+                        { title: 'Consult', desc: 'Talk to a verified doctor', color: '#8B5CF6' },
+                        { title: 'Track', desc: 'Monitor trends & plan', color: '#10B981' }
+                      ];
+
+                      return (
+                        <Grid container spacing={2}>
+                          {steps.map((s, idx) => (
+                            <Grid item xs={12} md={3} key={s.title}>
+                              <Paper
+                                sx={{
+                                  p: 2,
+                                  borderRadius: 2,
+                                  bgcolor: idx <= step ? `${s.color}12` : 'rgba(15,23,42,0.03)',
+                                  border: `1px solid ${idx <= step ? `${s.color}30` : 'rgba(15,23,42,0.08)'}`,
+                                  position: 'relative',
+                                  overflow: 'hidden'
+                                }}
+                              >
+                                <Typography sx={{ fontWeight: 950, color: idx <= step ? '#0f172a' : 'text.secondary' }}>
+                                  {s.title}
+                                </Typography>
+                                <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.4 }}>
+                                  {s.desc}
+                                </Typography>
+                                {idx === step && (
+                                  <Chip
+                                    size="small"
+                                    label="You are here"
+                                    sx={{
+                                      mt: 1.2,
+                                      fontWeight: 900,
+                                      bgcolor: `${s.color}25`,
+                                      border: `1px solid ${s.color}35`
+                                    }}
+                                  />
+                                )}
+                              </Paper>
+                            </Grid>
+                          ))}
+                        </Grid>
+                      );
+                    })()}
+                  </CardContent>
+                </GlassCard>
+              </Grid>
+
               <Grid item xs={12} md={4}>
                 <StyledCard>
                   <CardContent>
@@ -715,8 +1329,8 @@ const PatientDashboard = () => {
               ) : (
                 appointments.map((apt) => (
                   <Grid item xs={12} md={6} key={apt.id}>
-                    <StyledCard>
-                      <CardContent>
+                    <StyledCard sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                      <CardContent sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
                           <Typography variant="h6" fontWeight={600}>
                             Dr. {apt.doctor_name}
@@ -762,7 +1376,7 @@ const PatientDashboard = () => {
                           <Chip label="EMERGENCY" color="error" size="small" sx={{ mb: 2 }} />
                         )}
 
-                        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 'auto' }}>
                           {apt.status === 'accepted' && (() => {
                             const aptDateTime = new Date(`${apt.appointment_date}T${apt.appointment_time}`);
                             return aptDateTime > new Date();
@@ -962,7 +1576,8 @@ const PatientDashboard = () => {
         doctor={selectedDoctor}
         patientName={userName}
       />
-    </Container>
+      </Container>
+    </Box>
   );
 };
 

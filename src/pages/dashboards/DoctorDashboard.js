@@ -40,6 +40,19 @@ const StatusChip = styled(Chip)(({ status }) => ({
   ...(status === 'rejected' && { backgroundColor: '#ef5350', color: 'white' }),
 }));
 
+const GlassCard = styled(Card)(({ theme }) => ({
+  borderRadius: theme.spacing(2.5),
+  background: 'rgba(255,255,255,0.86)',
+  backdropFilter: 'blur(14px)',
+  border: '1px solid rgba(148, 163, 184, 0.25)',
+  boxShadow: '0 10px 30px rgba(15,23,42,0.12)',
+  transition: 'transform 0.18s ease, box-shadow 0.18s ease',
+  '&:hover': {
+    transform: 'translateY(-4px)',
+    boxShadow: '0 18px 46px rgba(15,23,42,0.18)'
+  }
+}));
+
 const DoctorDashboard = () => {
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -171,6 +184,18 @@ const DoctorDashboard = () => {
 
   const pendingCount = appointments.filter(a => a.status === 'pending').length;
 
+  const nextConsultation = () => {
+    const upcoming = appointments
+      .filter(a => a.status === 'accepted')
+      .map(a => ({
+        ...a,
+        dateTime: new Date(`${a.appointment_date}T${a.appointment_time}`)
+      }))
+      .filter(a => !Number.isNaN(a.dateTime.getTime()) && a.dateTime > new Date())
+      .sort((a, b) => a.dateTime - b.dateTime);
+    return upcoming[0] || null;
+  };
+
   if (activeCall) {
     return (
       <VideoCallRoom
@@ -182,16 +207,23 @@ const DoctorDashboard = () => {
   }
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
+    <Box
+      sx={{
+        minHeight: 'calc(100vh - 80px)',
+        background: 'linear-gradient(180deg, #f9fafb 0%, #eef2ff 35%, #e0f2fe 100%)',
+        py: 4
+      }}
+    >
+      <Container maxWidth="xl">
       {activeSection === 'overview' && (
         <>
           <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Box>
-              <Typography variant="h4" fontWeight={700} gutterBottom>
-                Dashboard Overview
+              <Typography variant="h4" fontWeight={800} gutterBottom sx={{ color: '#0f172a' }}>
+                Clinical Overview
               </Typography>
-              <Typography variant="body1" color="textSecondary">
-                Welcome back, Doctor!
+              <Typography variant="body1" sx={{ color: '#475569' }}>
+                A quick snapshot of today&apos;s workload and follow‑ups.
               </Typography>
             </Box>
             {pendingCount > 0 && (
@@ -202,41 +234,125 @@ const DoctorDashboard = () => {
           </Box>
 
           <Grid container spacing={3} sx={{ mb: 4 }}>
-            <Grid item xs={12} md={3}>
-              <Card sx={{ bgcolor: '#e3f2fd' }}>
-                <CardContent>
-                  <Typography variant="h6">Total Appointments</Typography>
-                  <Typography variant="h3" fontWeight={700}>{appointments.length}</Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-            <Grid item xs={12} md={3}>
-              <Card sx={{ bgcolor: '#fff3e0' }}>
-                <CardContent>
-                  <Typography variant="h6">Pending</Typography>
-                  <Typography variant="h3" fontWeight={700}>{pendingCount}</Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-            <Grid item xs={12} md={3}>
-              <Card sx={{ bgcolor: '#e8f5e9' }}>
-                <CardContent>
-                  <Typography variant="h6">Accepted</Typography>
-                  <Typography variant="h3" fontWeight={700}>
-                    {appointments.filter(a => a.status === 'accepted').length}
+            <Grid item xs={12} md={4}>
+              <GlassCard>
+                <CardContent sx={{ p: 2.6 }}>
+                  <Typography variant="overline" sx={{ color: '#64748b', fontWeight: 700 }}>
+                    Today&apos;s Queue
+                  </Typography>
+                  <Typography variant="h3" fontWeight={900} sx={{ color: '#0f172a' }}>
+                    {appointments.length}
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: '#64748b' }}>
+                    Total appointments on your schedule
                   </Typography>
                 </CardContent>
-              </Card>
+              </GlassCard>
             </Grid>
-            <Grid item xs={12} md={3}>
-              <Card sx={{ bgcolor: '#f3e5f5' }}>
-                <CardContent>
-                  <Typography variant="h6">Completed</Typography>
-                  <Typography variant="h3" fontWeight={700}>
+            <Grid item xs={12} md={4}>
+              <GlassCard>
+                <CardContent sx={{ p: 2.6 }}>
+                  <Typography variant="overline" sx={{ color: '#f97316', fontWeight: 700 }}>
+                    Awaiting Review
+                  </Typography>
+                  <Typography variant="h3" fontWeight={900} sx={{ color: '#b91c1c' }}>
+                    {pendingCount}
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: '#64748b' }}>
+                    New consultation requests pending action
+                  </Typography>
+                </CardContent>
+              </GlassCard>
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <GlassCard>
+                <CardContent sx={{ p: 2.6 }}>
+                  <Typography variant="overline" sx={{ color: '#10b981', fontWeight: 700 }}>
+                    Completed Today
+                  </Typography>
+                  <Typography variant="h3" fontWeight={900} sx={{ color: '#065f46' }}>
                     {appointments.filter(a => a.status === 'completed').length}
                   </Typography>
+                  <Typography variant="body2" sx={{ color: '#64748b' }}>
+                    Consultations closed with patients
+                  </Typography>
                 </CardContent>
-              </Card>
+              </GlassCard>
+            </Grid>
+          </Grid>
+
+          <Grid container spacing={3} sx={{ mb: 4 }}>
+            <Grid item xs={12} md={6}>
+              <GlassCard>
+                <CardContent sx={{ p: 2.6 }}>
+                  <Typography variant="h6" fontWeight={700} sx={{ mb: 1, color: '#0f172a' }}>
+                    Next Consultation
+                  </Typography>
+                  {(() => {
+                    const next = nextConsultation();
+                    if (!next) {
+                      return (
+                        <Typography variant="body2" sx={{ color: '#64748b' }}>
+                          No upcoming accepted consultations scheduled.
+                        </Typography>
+                      );
+                    }
+                    const timeString = `${new Date(next.appointment_date).toLocaleDateString()} at ${next.appointment_time}`;
+                    return (
+                      <>
+                        <Typography variant="subtitle1" fontWeight={700} sx={{ color: '#0f172a' }}>
+                          {next.patient_name}
+                        </Typography>
+                        <Typography variant="body2" sx={{ color: '#64748b' }}>
+                          {timeString}
+                        </Typography>
+                        <Chip
+                          icon={<VideoCall fontSize="small" />}
+                          label="Video consultation"
+                          sx={{ mt: 1.2, fontWeight: 600 }}
+                          color="primary"
+                          variant="outlined"
+                        />
+                      </>
+                    );
+                  })()}
+                </CardContent>
+              </GlassCard>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <GlassCard>
+                <CardContent sx={{ p: 2.6 }}>
+                  <Typography variant="h6" fontWeight={700} sx={{ mb: 1, color: '#0f172a' }}>
+                    Quick Actions
+                  </Typography>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, mt: 1 }}>
+                    <Button
+                      variant="contained"
+                      size="small"
+                      sx={{ borderRadius: 999, bgcolor: '#0f766e', '&:hover': { bgcolor: '#115e59' } }}
+                      onClick={() => window.dispatchEvent(new CustomEvent('doctorSectionChange', { detail: 'requests' }))}
+                    >
+                      View Requests
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      sx={{ borderRadius: 999 }}
+                      onClick={() => window.dispatchEvent(new CustomEvent('doctorSectionChange', { detail: 'patients' }))}
+                    >
+                      My Patients
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      sx={{ borderRadius: 999 }}
+                      onClick={() => window.dispatchEvent(new CustomEvent('doctorSectionChange', { detail: 'profile' }))}
+                    >
+                      Edit Profile
+                    </Button>
+                  </Box>
+                </CardContent>
+              </GlassCard>
             </Grid>
           </Grid>
         </>
@@ -517,7 +633,8 @@ const DoctorDashboard = () => {
         }}
         appointmentId={selectedAppointment?.id}
       />
-    </Container>
+      </Container>
+    </Box>
   );
 };
 

@@ -166,112 +166,245 @@ const SymptomChecker = () => {
 
       {result && (
         <>
-          <Card sx={{ mb: 3, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
-            <CardContent>
-              <Typography variant="h6" fontWeight={700} gutterBottom>
-                🔹 Top Predicted Condition
-              </Typography>
-
-              <Paper sx={{ p: 3, bgcolor: '#f5f5f5', mb: 2 }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                  <Typography variant="h5" fontWeight={700}>
-                    {result.top_prediction.disease}
+          <Card sx={{ mb: 3, boxShadow: '0 4px 16px rgba(0,0,0,0.1)', borderRadius: 3 }}>
+            <CardContent sx={{ p: 0 }}>
+              <Box
+                sx={{
+                  px: 3,
+                  py: 2,
+                  borderTopLeftRadius: 12,
+                  borderTopRightRadius: 12,
+                  borderBottom: '1px solid #e5e7eb',
+                  bgcolor: '#0f766e',
+                  color: 'white',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}
+              >
+                <Box>
+                  <Typography variant="subtitle2" sx={{ opacity: 0.9 }}>
+                    HealthAI Medical Center
                   </Typography>
-                  <Chip
-                    label={result.top_prediction.risk}
-                    sx={{
-                      bgcolor: getRiskColor(result.top_prediction.risk),
-                      color: 'white',
-                      fontWeight: 600
-                    }}
-                  />
+                  <Typography variant="h6" fontWeight={800}>
+                    AI DIAGNOSTIC SUMMARY
+                  </Typography>
                 </Box>
-
-                <Box sx={{ mb: 2 }}>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                    <Typography variant="body2" color="textSecondary">
-                      Confidence Score
-                    </Typography>
-                    <Typography variant="body2" fontWeight={600}>
-                      {result.top_prediction.confidence}%
-                    </Typography>
-                  </Box>
-                  <LinearProgress
-                    variant="determinate"
-                    value={result.top_prediction.confidence}
-                    sx={{
-                      height: 10,
-                      borderRadius: 5,
-                      bgcolor: '#e0e0e0',
-                      '& .MuiLinearProgress-bar': {
-                        bgcolor: getRiskColor(result.top_prediction.risk)
-                      }
-                    }}
-                  />
+                <Box sx={{ textAlign: 'right', fontSize: '0.75rem' }}>
+                  <Typography>Report ID: {result.report_id || 'AUTO-GEN'}</Typography>
+                  <Typography>
+                    Generated:{' '}
+                    {new Date().toLocaleString()}
+                  </Typography>
                 </Box>
+              </Box>
 
-                {result.top_prediction.explanation && (
-                  <Alert severity="info" icon={<CheckCircle size={20} />}>
-                    {result.top_prediction.explanation}
-                  </Alert>
-                )}
+              <Box sx={{ p: 3 }}>
+                {/* Patient / meta block */}
+                <Grid container spacing={2} sx={{ mb: 2 }}>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="caption" color="textSecondary">
+                      Patient Name
+                    </Typography>
+                    <Typography fontWeight={600}>
+                      {result.patient_name || 'Not provided'}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={6} sm={3}>
+                    <Typography variant="caption" color="textSecondary">
+                      Report Date
+                    </Typography>
+                    <Typography fontWeight={600}>
+                      {new Date().toLocaleDateString()}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={6} sm={3}>
+                    <Typography variant="caption" color="textSecondary">
+                      Severity (self‑reported)
+                    </Typography>
+                    <Typography fontWeight={600}>
+                      {severity || 'Not specified'}
+                    </Typography>
+                  </Grid>
+                </Grid>
 
-                {getModelPath(result.top_prediction.disease) && (
-                  <Button
-                    variant="contained"
-                    endIcon={<ArrowRight size={20} />}
-                    onClick={() => navigate(getModelPath(result.top_prediction.disease))}
-                    sx={{ mt: 2, bgcolor: '#2196f3', '&:hover': { bgcolor: '#1976d2' } }}
+                <Paper
+                  elevation={0}
+                  sx={{
+                    p: 2.5,
+                    mb: 2.5,
+                    borderRadius: 2,
+                    border: '1px solid #e5e7eb',
+                    bgcolor: '#fafafa'
+                  }}
+                >
+                  <Typography variant="subtitle2" color="textSecondary" gutterBottom>
+                    Chief Complaint
+                  </Typography>
+                  <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                    {symptoms}
+                  </Typography>
+                </Paper>
+
+                {/* Top condition block */}
+                <Paper
+                  elevation={0}
+                  sx={{
+                    p: 2.5,
+                    mb: 2.5,
+                    borderRadius: 2,
+                    border: '1px solid #e5e7eb'
+                  }}
+                >
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      mb: 1.5
+                    }}
                   >
-                    Run Detailed {result.top_prediction.disease} Assessment
-                  </Button>
-                )}
-              </Paper>
+                    <Box>
+                      <Typography
+                        variant="caption"
+                        color="textSecondary"
+                        sx={{ textTransform: 'uppercase', letterSpacing: 0.08 }}
+                      >
+                        Primary Suspected Condition
+                      </Typography>
+                      <Typography variant="h6" fontWeight={800}>
+                        {result.top_prediction.disease}
+                      </Typography>
+                    </Box>
+                    <Chip
+                      label={result.top_prediction.risk}
+                      sx={{
+                        bgcolor: getRiskColor(result.top_prediction.risk),
+                        color: 'white',
+                        fontWeight: 700,
+                        px: 1
+                      }}
+                    />
+                  </Box>
 
-              {result.other_conditions.length > 0 && (
-                <>
-                  <Typography variant="h6" fontWeight={700} gutterBottom sx={{ mt: 3 }}>
-                    🔹 Other Possible Conditions
-                  </Typography>
-
-                  {result.other_conditions.map((condition, idx) => (
-                    <Paper key={idx} sx={{ p: 2, mb: 2, bgcolor: '#fafafa' }}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Box sx={{ flex: 1 }}>
-                          <Typography variant="subtitle1" fontWeight={600}>
-                            {condition.disease}
-                          </Typography>
-                          <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
-                            <LinearProgress
-                              variant="determinate"
-                              value={condition.confidence}
-                              sx={{
-                                width: 200,
-                                height: 6,
-                                borderRadius: 3,
-                                bgcolor: '#e0e0e0',
-                                mr: 2
-                              }}
-                            />
-                            <Typography variant="body2" color="textSecondary">
-                              {condition.confidence}%
-                            </Typography>
-                          </Box>
-                        </Box>
-                        <Chip
-                          label={condition.risk}
-                          size="small"
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} sm={6}>
+                      <Typography variant="caption" color="textSecondary">
+                        Confidence Score
+                      </Typography>
+                      <Box sx={{ mt: 0.5 }}>
+                        <Box
                           sx={{
-                            bgcolor: getRiskColor(condition.risk),
-                            color: 'white',
-                            fontWeight: 600
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            mb: 0.5
+                          }}
+                        >
+                          <Typography variant="body2" color="textSecondary">
+                            Model estimate
+                          </Typography>
+                          <Typography variant="body2" fontWeight={700}>
+                            {result.top_prediction.confidence}%
+                          </Typography>
+                        </Box>
+                        <LinearProgress
+                          variant="determinate"
+                          value={result.top_prediction.confidence}
+                          sx={{
+                            height: 8,
+                            borderRadius: 4,
+                            bgcolor: '#e5e7eb',
+                            '& .MuiLinearProgress-bar': {
+                              bgcolor: getRiskColor(result.top_prediction.risk)
+                            }
                           }}
                         />
                       </Box>
-                    </Paper>
-                  ))}
-                </>
-              )}
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <Typography variant="caption" color="textSecondary">
+                        Suggested Next Step
+                      </Typography>
+                      <Typography variant="body2" sx={{ mt: 0.5 }}>
+                        {result.top_prediction.next_step ||
+                          'Schedule a clinical consultation and share this report with your doctor for confirmation.'}
+                      </Typography>
+                    </Grid>
+                  </Grid>
+
+                  {result.top_prediction.explanation && (
+                    <Alert
+                      severity="info"
+                      icon={<CheckCircle size={20} />}
+                      sx={{ mt: 2 }}
+                    >
+                      {result.top_prediction.explanation}
+                    </Alert>
+                  )}
+
+                  {getModelPath(result.top_prediction.disease) && (
+                    <Button
+                      variant="contained"
+                      endIcon={<ArrowRight size={20} />}
+                      onClick={() =>
+                        navigate(getModelPath(result.top_prediction.disease))
+                      }
+                      sx={{
+                        mt: 2,
+                        bgcolor: '#2196f3',
+                        '&:hover': { bgcolor: '#1976d2' }
+                      }}
+                    >
+                      Run Detailed {result.top_prediction.disease} Assessment
+                    </Button>
+                  )}
+                </Paper>
+
+                {result.other_conditions.length > 0 && (
+                  <>
+                    <Typography variant="h6" fontWeight={700} gutterBottom sx={{ mt: 3 }}>
+                      🔹 Other Possible Conditions
+                    </Typography>
+
+                    {result.other_conditions.map((condition, idx) => (
+                      <Paper key={idx} sx={{ p: 2, mb: 2, bgcolor: '#fafafa' }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <Box sx={{ flex: 1 }}>
+                            <Typography variant="subtitle1" fontWeight={600}>
+                              {condition.disease}
+                            </Typography>
+                            <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
+                              <LinearProgress
+                                variant="determinate"
+                                value={condition.confidence}
+                                sx={{
+                                  width: 200,
+                                  height: 6,
+                                  borderRadius: 3,
+                                  bgcolor: '#e0e0e0',
+                                  mr: 2
+                                }}
+                              />
+                              <Typography variant="body2" color="textSecondary">
+                                {condition.confidence}%
+                              </Typography>
+                            </Box>
+                          </Box>
+                          <Chip
+                            label={condition.risk}
+                            size="small"
+                            sx={{
+                              bgcolor: getRiskColor(condition.risk),
+                              color: 'white',
+                              fontWeight: 600
+                            }}
+                          />
+                        </Box>
+                      </Paper>
+                    ))}
+                  </>
+                )}
+              </Box>
             </CardContent>
           </Card>
 

@@ -297,13 +297,55 @@ Format:
     <PageContainer maxWidth="lg">
       <HeaderSection>
         <Box sx={{ textAlign: 'center' }}>
-          <PsychologyIcon sx={{ fontSize: 48, mb: 1 }} />
+          <Box
+            sx={{
+              width: 72,
+              height: 72,
+              borderRadius: 3,
+              mx: 'auto',
+              mb: 1.5,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'linear-gradient(135deg, #1E8E6A 0%, #2BBF9F 100%)',
+              boxShadow: '0 10px 26px rgba(30,142,106,0.35)'
+            }}
+          >
+            <PsychologyIcon sx={{ fontSize: 40, color: '#ffffff' }} />
+          </Box>
           <GradientTitle variant="h3" component="h1">
             NutriMind AI
           </GradientTitle>
           <Typography variant="h6" sx={{ opacity: 0.9, color: '#34495E' }}>
             Personalized Indian meal plans powered by AI
           </Typography>
+          <Box sx={{ mt: 1.5, display: 'flex', justifyContent: 'center' }}>
+            <svg viewBox="0 0 260 32" style={{ width: 220, height: 22 }}>
+              <defs>
+                <linearGradient id="nutri-ecg" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stopColor="#1E8E6A" />
+                  <stop offset="50%" stopColor="#2BBF9F" />
+                  <stop offset="100%" stopColor="#22C55E" />
+                </linearGradient>
+              </defs>
+              <polyline
+                fill="none"
+                stroke="url(#nutri-ecg)"
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                points="0,18 30,18 40,18 48,10 53,26 58,18 78,18 110,18 122,18 130,9 135,26 140,18 162,18 190,18 202,18 210,10 215,26 220,18 240,18 260,18"
+              >
+                <animate
+                  attributeName="stroke-dasharray"
+                  from="0,520"
+                  to="520,0"
+                  dur="2.3s"
+                  repeatCount="indefinite"
+                />
+              </polyline>
+            </svg>
+          </Box>
         </Box>
       </HeaderSection>
 
