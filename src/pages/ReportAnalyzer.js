@@ -11,6 +11,7 @@ import {
   CardContent,
   Chip,
   Divider,
+  Grid,
   styled
 } from '@mui/material';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
@@ -115,73 +116,63 @@ const ReportAnalyzer = () => {
   };
 
   return (
-    <Box sx={{ 
-      minHeight: 'calc(100vh - 160px)', 
-      display: 'flex', 
-      alignItems: 'center', 
-      justifyContent: 'center',
-      py: 4 
-    }}>
-      <Container maxWidth="md">
-        <StyledPaper>
-          <Box sx={{ textAlign: 'center', mb: 3 }}>
-            <DescriptionIcon sx={{ fontSize: 48, color: '#2196f3', mb: 1 }} />
-            <Typography variant="h5" gutterBottom fontWeight={600}>
-              Medical Report Analyzer
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Upload your medical report (PDF or image) to get simple explanations
-            </Typography>
-          </Box>
+    <Box sx={{ minHeight: 'calc(100vh - 160px)', py: 4 }}>
+      <Container maxWidth="lg">
+        <Box sx={{ textAlign: 'center', mb: 4 }}>
+          <DescriptionIcon sx={{ fontSize: 48, color: '#2196f3', mb: 1 }} />
+          <Typography variant="h5" gutterBottom fontWeight={600}>
+            Medical Report Analyzer
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Upload your medical report (PDF or image) to get simple explanations
+          </Typography>
+        </Box>
 
-          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
-            <input
-              type="file"
-              id="file-upload"
-              accept=".pdf,.jpg,.jpeg,.png"
-              style={{ display: 'none' }}
-              onChange={handleFileChange}
-            />
+        <StyledPaper sx={{ mb: 3 }}>
+              <input
+                type="file"
+                id="file-upload"
+                accept=".pdf,.jpg,.jpeg,.png"
+                style={{ display: 'none' }}
+                onChange={handleFileChange}
+              />
 
-            <label htmlFor="file-upload" style={{ width: '100%', maxWidth: '500px' }}>
-              <UploadBox>
-                <UploadFileIcon sx={{ fontSize: 48, color: '#2196f3', mb: 2 }} />
-                <Typography variant="h6" gutterBottom>
-                  {file ? file.name : 'Click to upload your medical report'}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Supported formats: PDF, JPG, PNG
-                </Typography>
-              </UploadBox>
-            </label>
+              <label htmlFor="file-upload" style={{ width: '100%' }}>
+                <UploadBox>
+                  <UploadFileIcon sx={{ fontSize: 48, color: '#2196f3', mb: 2 }} />
+                  <Typography variant="h6" gutterBottom>
+                    {file ? file.name : 'Click to upload your medical report'}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Supported formats: PDF, JPG, PNG
+                  </Typography>
+                </UploadBox>
+              </label>
 
-            {file && (
-              <Button
-                variant="contained"
-                size="large"
-                onClick={handleUpload}
-                disabled={loading}
-                sx={{ minWidth: 200 }}
-              >
-                {loading ? <CircularProgress size={24} color="inherit" /> : 'Analyze Report'}
-              </Button>
-            )}
+              {file && (
+                <Button
+                  variant="contained"
+                  size="large"
+                  onClick={handleUpload}
+                  disabled={loading}
+                  fullWidth
+                  sx={{ mt: 3 }}
+                >
+                  {loading ? <CircularProgress size={24} color="inherit" /> : 'Analyze Report'}
+                </Button>
+              )}
 
-            {error && (
-              <Alert severity="error" sx={{ width: '100%', maxWidth: '500px' }}>
-                {error}
-              </Alert>
-            )}
-          </Box>
+              {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
+        </StyledPaper>
 
-          {result && (
-          <Box sx={{ mt: 4 }}>
-            <Alert severity="info" sx={{ mb: 3 }}>
-              {result.disclaimer}
-            </Alert>
+        {result && (
+          <StyledPaper>
+                <Alert severity="info" sx={{ mb: 3 }}>
+                  {result.disclaimer}
+                </Alert>
 
-            {result.parameters && result.parameters.length > 0 ? (
-              <>
+                {result.parameters && result.parameters.length > 0 ? (
+                  <>
                 <Typography variant="h5" gutterBottom sx={{ mb: 3 }}>
                   Found {result.total_found} Parameter{result.total_found !== 1 ? 's' : ''}
                 </Typography>
@@ -321,17 +312,16 @@ const ReportAnalyzer = () => {
                     </CardContent>
                   </Card>
                 ))}
-              </>
-            ) : (
-              <Alert severity="warning">
-                {result.message || 'No medical parameters detected in the report'}
-              </Alert>
+                  </>
+                ) : (
+                  <Alert severity="warning">
+                    {result.message || 'No medical parameters detected in the report'}
+                  </Alert>
             )}
-          </Box>
+          </StyledPaper>
         )}
-      </StyledPaper>
-    </Container>
-  </Box>
+      </Container>
+    </Box>
   );
 };
 

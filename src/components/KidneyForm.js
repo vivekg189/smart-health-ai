@@ -17,7 +17,7 @@ import {
   useMediaQuery,
 } from '@mui/material';
 import DownloadIcon from '@mui/icons-material/Download';
-import jsPDF from 'jspdf';
+import { generateMedicalReport } from '../utils/reportGenerator';
 import { styled } from '@mui/material/styles';
 
 // Styled Components
@@ -576,101 +576,10 @@ const KidneyForm = () => {
                   <DownloadButton
                     variant="outlined"
                     startIcon={<DownloadIcon />}
-                    onClick={() => {
-                      const doc = new jsPDF();
-                      
-                      // Set font styles
-                      doc.setFontSize(20);
-                      doc.text('Kidney Disease Prediction Results', 20, 20);
-                      
-                      // Add date
-                      doc.setFontSize(12);
-                      doc.text(`Date: ${new Date().toLocaleDateString()}`, 20, 30);
-                      
-                      // Add input values section
-                      doc.setFontSize(16);
-                      doc.text('Input Values:', 20, 45);
-                      doc.setFontSize(12);
-                      
-                      let yPosition = 55;
-                      const lineHeight = 7;
-                      
-                      // Add input values with proper formatting
-                      Object.entries(formData).forEach(([key, value]) => {
-                        const label = key.split('_').map(word => 
-                          word.charAt(0).toUpperCase() + word.slice(1)
-                        ).join(' ');
-                        doc.text(`${label}: ${value}`, 20, yPosition);
-                        yPosition += lineHeight;
-                      });
-                      
-                      yPosition += lineHeight;
-                      
-                      // Add prediction results section
-                      doc.setFontSize(16);
-                      doc.text('Prediction Results:', 20, yPosition);
-                      yPosition += lineHeight;
-                      
-                      doc.setFontSize(12);
-                      doc.text(`Risk Level: ${result.risk_level}`, 20, yPosition);
-                      yPosition += lineHeight;
-                      
-                      doc.text(`Probability: ${(result.probability * 100).toFixed(2)}%`, 20, yPosition);
-                      yPosition += lineHeight * 2;
-                      
-                      // Add risk level description section
-                      doc.setFontSize(16);
-                      doc.text('Risk Level Description:', 20, yPosition);
-                      yPosition += lineHeight;
-                      
-                      doc.setFontSize(12);
-                      let riskDescription = [];
-                      
-                      if (result.risk_level === "Very High") {
-                        riskDescription = [
-                          "• Indicates a very high likelihood of kidney disease",
-                          "• Should seek immediate medical attention",
-                          "• May need further diagnostic tests and treatment"
-                        ];
-                      } else if (result.risk_level === "High") {
-                        riskDescription = [
-                          "• Indicates a significant likelihood of kidney disease",
-                          "• Should consult a healthcare provider",
-                          "• May need additional tests to confirm"
-                        ];
-                      } else if (result.risk_level === "Moderate") {
-                        riskDescription = [
-                          "• Indicates some risk factors present",
-                          "• Should monitor kidney health",
-                          "• Consider lifestyle changes and regular check-ups"
-                        ];
-                      } else {
-                        riskDescription = [
-                          "• Indicates lower likelihood of kidney disease",
-                          "• Still maintain healthy lifestyle",
-                          "• Regular health check-ups recommended"
-                        ];
-                      }
-                      
-                      // Add risk description points
-                      riskDescription.forEach(point => {
-                        doc.text(point, 20, yPosition);
-                        yPosition += lineHeight;
-                      });
-                      
-                      yPosition += lineHeight;
-                      
-                      // Add disclaimer
-                      doc.setFontSize(10);
-                      doc.setFont(undefined, 'italic');
-                      doc.text('Note: This is a prediction model, not a definitive diagnosis. Please consult healthcare professionals for proper medical advice.', 20, yPosition, { maxWidth: 170 });
-                      
-                      // Save the PDF
-                      doc.save(`kidney_prediction_${new Date().toISOString().split('T')[0]}.pdf`);
-                    }}
+                    onClick={() => generateMedicalReport('kidney', formData, result)}
                     sx={{ mt: 2, minWidth: 200 }}
                   >
-                    Download Results
+                    Download Medical Report
                   </DownloadButton>
                 </Box>
               </Fade>

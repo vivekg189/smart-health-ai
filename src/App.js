@@ -33,7 +33,9 @@ import DiabetesInfo from './pages/DiabetesInfo';
 import KidneyInfo from './pages/KidneyInfo';
 import HeartInfo from './pages/HeartInfo';
 import BoneInfo from './pages/BoneInfo';
+import Settings from './pages/Settings';
 import Chatbot from './components/Chatbot';
+import SymptomChecker from './components/SymptomChecker';
 
 function AppContent() {
   const location = useLocation();
@@ -46,6 +48,7 @@ function AppContent() {
                      location.pathname.startsWith('/hospital-finder') || 
                      location.pathname.startsWith('/meet-doctor') || 
                      location.pathname.startsWith('/report-analyzer') || 
+                     location.pathname.startsWith('/settings') || 
                      location.pathname.startsWith('/diabetes') || 
                      location.pathname.startsWith('/heart') || 
                      location.pathname.startsWith('/liver') || 
@@ -65,6 +68,7 @@ function AppContent() {
           
           <Route element={<ProtectedRoute allowedRoles={['patient']}><PatientLayout /></ProtectedRoute>}>
             <Route path="/patient-dashboard" element={<PatientDashboard />} />
+            <Route path="/settings" element={<Settings />} />
             <Route path="/models" element={<Container className="py-4"><ModelsAnimated /></Container>} />
             <Route path="/assistant" element={<Container className="py-4"><Assistant /></Container>} />
             <Route path="/hospital-finder" element={<Container className="py-4"><HospitalFinder /></Container>} />
@@ -75,6 +79,7 @@ function AppContent() {
             <Route path="/liver" element={<Container className="py-4"><LiverForm /></Container>} />
             <Route path="/kidney" element={<Container className="py-4"><KidneyForm /></Container>} />
             <Route path="/bone" element={<Container className="py-4"><BoneForm /></Container>} />
+            <Route path="/symptom-checker" element={<Container className="py-4"><SymptomChecker /></Container>} />
           </Route>
           
           <Route element={<ProtectedRoute allowedRoles={['doctor']}><DoctorLayout /></ProtectedRoute>}>

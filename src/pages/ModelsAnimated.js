@@ -8,13 +8,21 @@ const ModelsAnimated = () => {
 
   const models = [
     {
+      id: 'symptom-checker',
+      title: 'AI Symptom Checker',
+      description: 'Describe your symptoms in natural language and get AI-powered disease insights using BioBERT NLI model.',
+      icon: '🔍',
+      color: '#00897B',
+      features: ['Natural Language', 'BioBERT AI', 'Disease Prediction', 'Risk Assessment'],
+      path: '/symptom-checker'
+    },
+    {
       id: 'diabetes',
       title: 'Diabetes Risk Assessment',
       description: 'Advanced AI model for predicting Type 2 diabetes risk using clinical parameters and lifestyle factors.',
       icon: '🩺',
-      color: '#667eea',
+      color: '#00897B',
       features: ['Glucose Analysis', 'BMI Evaluation', 'Family History', 'Lifestyle Factors'],
-      accuracy: '99.2%',
       path: '/diabetes'
     },
     {
@@ -22,9 +30,8 @@ const ModelsAnimated = () => {
       title: 'Cardiovascular Health Analysis',
       description: 'Comprehensive heart disease risk prediction using advanced cardiac biomarkers and clinical data.',
       icon: '❤️',
-      color: '#f093fb',
+      color: '#00897B',
       features: ['ECG Analysis', 'Blood Pressure', 'Cholesterol Levels', 'Cardiac Enzymes'],
-      accuracy: '98.7%',
       path: '/heart'
     },
     {
@@ -32,9 +39,8 @@ const ModelsAnimated = () => {
       title: 'Liver Function Assessment',
       description: 'AI-powered liver health evaluation using enzyme levels and clinical indicators.',
       icon: '🫀',
-      color: '#4facfe',
+      color: '#00897B',
       features: ['Enzyme Analysis', 'Bilirubin Levels', 'Protein Synthesis', 'Metabolic Function'],
-      accuracy: '97.9%',
       path: '/liver'
     },
     {
@@ -42,9 +48,8 @@ const ModelsAnimated = () => {
       title: 'Kidney Disease Prediction',
       description: 'Early detection of chronic kidney disease using advanced biomarker analysis.',
       icon: '🫘',
-      color: '#764ba2',
+      color: '#00897B',
       features: ['Creatinine Analysis', 'GFR Calculation', 'Proteinuria Detection', 'Electrolyte Balance'],
-      accuracy: '98.5%',
       path: '/kidney'
     },
     {
@@ -52,9 +57,8 @@ const ModelsAnimated = () => {
       title: 'Bone Fracture Detection',
       description: 'AI-powered medical imaging analysis for accurate fracture identification and classification.',
       icon: '🦴',
-      color: '#f5576c',
+      color: '#00897B',
       features: ['X-Ray Analysis', 'Fracture Classification', 'Severity Assessment', 'Treatment Recommendations'],
-      accuracy: '96.8%',
       path: '/bone-info'
     }
   ];
@@ -64,84 +68,97 @@ const ModelsAnimated = () => {
   };
 
   return (
-    <div className="animate-fadeIn">
+    <div className="animate-fadeIn" style={{ 
+      minHeight: '100vh',
+      width: '100%',
+      padding: '0',
+      margin: '0',
+      background: 'linear-gradient(135deg, #E6F7F5 0%, #DCEAF2 100%)'
+    }}>
       {/* Header Section */}
-      <section className="py-5 mb-4">
-        <Container>
-          <Row className="text-center">
-            <Col>
-              <h1 className="display-4 fw-bold mb-3 text-gradient animate-scaleUp">
-                AI Diagnostic Models
-              </h1>
-              <p className="lead text-muted animate-fadeIn">
-                Choose from our comprehensive suite of clinically validated AI models for accurate health assessments
-              </p>
-            </Col>
-          </Row>
-        </Container>
+      <section className="py-4 mb-3">
+        <Row className="text-center">
+          <Col>
+            <h1 className="display-4 fw-bold mb-3 animate-scaleUp" style={{
+              background: 'linear-gradient(135deg, #1E8E6A 0%, #2BBF9F 100%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent'
+            }}>
+              AI Diagnostic Models
+            </h1>
+            <p className="lead animate-fadeIn" style={{ color: '#2C3E50', fontSize: '1.1rem', fontWeight: '500' }}>
+              Choose from our comprehensive suite of clinically validated AI models for accurate health assessments
+            </p>
+          </Col>
+        </Row>
       </section>
 
       {/* Models Grid */}
-      <section className="py-4">
-        <Container>
-          <Row>
+      <section className="py-2" style={{ padding: '0 20px' }}>
+        <Row className="g-3">
             {models.map((model, index) => (
-              <Col lg={6} xl={4} key={model.id} className="mb-4">
+              <Col lg={4} key={model.id} className="mb-3">
                 <Card 
                   className={`h-100 border-0 card-animated hover-lift stagger-item`}
                   style={{
                     borderRadius: '20px',
-                    background: `linear-gradient(135deg, ${model.color}15, ${model.color}05)`,
-                    border: `2px solid ${model.color}20`,
-                    animationDelay: `${index * 0.1}s`
+                    background: 'rgba(255, 255, 255, 0.15)',
+                    backdropFilter: 'blur(12px)',
+                    border: '1px solid rgba(255, 255, 255, 0.3)',
+                    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
+                    animationDelay: `${index * 0.1}s`,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    minHeight: '420px',
+                    transition: 'all 0.3s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-5px)';
+                    e.currentTarget.style.boxShadow = '0 12px 40px rgba(0, 0, 0, 0.15)';
+                    e.currentTarget.style.backdropFilter = 'blur(16px)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.1)';
+                    e.currentTarget.style.backdropFilter = 'blur(12px)';
                   }}
                 >
-                  <Card.Body className="p-4">
+                  <Card.Body className="p-4" style={{ display: 'flex', flexDirection: 'column', flex: 1, justifyContent: 'space-between' }}>
                     {/* Model Icon and Title */}
-                    <div className="d-flex align-items-center mb-3">
+                    <div className="mb-3 text-center">
                       <div 
-                        className="me-3 animate-float"
+                        className="mb-2 animate-float"
                         style={{ 
-                          fontSize: '2.5rem',
+                          fontSize: '3rem',
                           filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.1))'
                         }}
                       >
                         {model.icon}
                       </div>
-                      <div>
-                        <Card.Title className="h5 fw-bold mb-1" style={{ color: model.color }}>
-                          {model.title}
-                        </Card.Title>
-                        <div 
-                          className="small fw-bold px-2 py-1 rounded-pill"
-                          style={{ 
-                            background: `${model.color}20`,
-                            color: model.color,
-                            display: 'inline-block'
-                          }}
-                        >
-                          {model.accuracy} Accuracy
-                        </div>
-                      </div>
+                      <Card.Title className="h5 fw-bold mb-2" style={{ color: '#2C3E50' }}>
+                        {model.title}
+                      </Card.Title>
                     </div>
 
                     {/* Description */}
-                    <Card.Text className="text-muted mb-3">
+                    <Card.Text className="text-muted mb-3" style={{ fontSize: '0.9rem', minHeight: '60px', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#34495E' }}>
                       {model.description}
                     </Card.Text>
 
                     {/* Features */}
-                    <div className="mb-4">
-                      <h6 className="fw-bold mb-2 text-dark">Key Features:</h6>
-                      <div className="d-flex flex-wrap gap-1">
+                    <div className="mb-3" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                      <h6 className="fw-bold mb-2 text-dark" style={{ fontSize: '0.95rem', textAlign: 'center', color: '#2C3E50' }}>Key Features</h6>
+                      <div className="d-flex flex-wrap gap-2 justify-content-center" style={{ minHeight: '80px', alignItems: 'center' }}>
                         {model.features.map((feature, idx) => (
                           <span 
                             key={idx}
-                            className="badge rounded-pill small"
+                            className="badge rounded-pill"
                             style={{ 
-                              background: `${model.color}15`,
-                              color: model.color,
-                              border: `1px solid ${model.color}30`
+                              background: 'linear-gradient(135deg, #1E8E6A, #2BBF9F)',
+                              color: 'white',
+                              padding: '8px 16px',
+                              fontSize: '0.85rem',
+                              fontWeight: '500'
                             }}
                           >
                             {feature}
@@ -151,67 +168,36 @@ const ModelsAnimated = () => {
                     </div>
 
                     {/* Action Button */}
-                    <Button 
-                      className="w-100 btn-animated hover-glow fw-bold"
-                      style={{
-                        background: `linear-gradient(135deg, ${model.color}, ${model.color}dd)`,
-                        border: 'none',
-                        borderRadius: '50px',
-                        padding: '12px 0',
-                        boxShadow: `0 4px 15px ${model.color}40`
-                      }}
-                      onClick={() => handleModelSelect(model)}
-                    >
-                      Start Assessment
-                    </Button>
+                    <div style={{ marginTop: 'auto' }}>
+                      <Button 
+                        className="w-100 fw-bold"
+                        style={{
+                          background: 'linear-gradient(135deg, #1E8E6A, #2BBF9F)',
+                          border: 'none',
+                          borderRadius: '50px',
+                          padding: '14px 0',
+                          boxShadow: '0 6px 20px rgba(30, 142, 106, 0.3)',
+                          transition: 'all 0.3s ease',
+                          color: 'white'
+                        }}
+                        onMouseOver={(e) => {
+                          e.currentTarget.style.transform = 'translateY(-2px)';
+                          e.currentTarget.style.boxShadow = '0 8px 25px rgba(30, 142, 106, 0.4)';
+                        }}
+                        onMouseOut={(e) => {
+                          e.currentTarget.style.transform = 'translateY(0)';
+                          e.currentTarget.style.boxShadow = '0 6px 20px rgba(30, 142, 106, 0.3)';
+                        }}
+                        onClick={() => handleModelSelect(model)}
+                      >
+                        Start Assessment
+                      </Button>
+                    </div>
                   </Card.Body>
                 </Card>
               </Col>
             ))}
           </Row>
-        </Container>
-      </section>
-
-      {/* Information Section */}
-      <section className="py-5 mt-4">
-        <Container>
-          <Row>
-            <Col>
-              <Card 
-                className="border-0 card-animated"
-                style={{
-                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                  borderRadius: '20px',
-                  color: 'white'
-                }}
-              >
-                <Card.Body className="text-center py-5">
-                  <h3 className="h4 fw-bold mb-3 animate-scaleUp">
-                    🏥 Clinical-Grade AI Diagnostics
-                  </h3>
-                  <p className="mb-4 opacity-90">
-                    Our AI models are trained on millions of clinical data points and validated by healthcare professionals worldwide. 
-                    Each assessment provides detailed insights and recommendations based on the latest medical research.
-                  </p>
-                  <div className="row text-center">
-                    <div className="col-md-4 mb-3 mb-md-0">
-                      <div className="h5 fw-bold">🎯</div>
-                      <div className="small">Clinical Validation</div>
-                    </div>
-                    <div className="col-md-4 mb-3 mb-md-0">
-                      <div className="h5 fw-bold">🔒</div>
-                      <div className="small">HIPAA Compliant</div>
-                    </div>
-                    <div className="col-md-4">
-                      <div className="h5 fw-bold">⚡</div>
-                      <div className="small">Instant Results</div>
-                    </div>
-                  </div>
-                </Card.Body>
-              </Card>
-            </Col>
-          </Row>
-        </Container>
       </section>
     </div>
   );

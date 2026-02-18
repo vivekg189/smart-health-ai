@@ -6,6 +6,10 @@ import joblib
 import os
 import logging
 import pandas as pd
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 from sklearn.preprocessing import LabelEncoder
 import re
 import csv
@@ -22,6 +26,17 @@ import warnings
 from config import init_db
 from auth import auth_bp
 from data_routes import data_bp
+from appointment_routes import appointment_bp
+from settings_routes import settings_bp
+from health_analytics import analytics_bp
+from models import User, DoctorAvailability, db, Prediction
+
+try:
+    from groq import Groq
+    GROQ_AVAILABLE = True
+except ImportError:
+    GROQ_AVAILABLE = False
+    logging.warning("Groq package not installed. Run: pip install groq")
 
 # Suppress EasyOCR warnings
 warnings.filterwarnings('ignore', category=UserWarning, module='torch')
@@ -31,7 +46,7 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-CORS(app, supports_credentials=True, origins=['http://localhost:3000'])
+CORS(app, supports_credentials=True, origins=['http://localhost:3000'], methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], allow_headers=['Content-Type', 'Authorization'])
 
 app.config['SESSION_TYPE'] = 'filesystem'
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
@@ -42,6 +57,9 @@ init_db(app)
 
 app.register_blueprint(auth_bp, url_prefix='/api/auth')
 app.register_blueprint(data_bp, url_prefix='/api/data')
+app.register_blueprint(appointment_bp, url_prefix='/api/appointments')
+app.register_blueprint(settings_bp)
+app.register_blueprint(analytics_bp, url_prefix='/api/analytics')
 
 # Initialize EasyOCR reader (load once at startup)
 _ocr_reader = None
@@ -69,7 +87,7 @@ _liver_path = os.path.join(BACKEND_DIR, 'liver_model.pkl')
 _k_scaler_path = os.path.join(BACKEND_DIR, 'k_scaler.pkl')
 _kidney_path = os.path.join(BACKEND_DIR, 'kidney_model.pkl')
 _h_scaler_path = os.path.join(BACKEND_DIR, 'h_scaler.pkl')
-_heart_path = os.path.join(BACKEND_DIR, 'heart_disease_model.pkl')
+_heart_path = os.path.join(BACKEND_DIR, 'cardio_random_forest.pkl')
 
 # Initialize to None by default
 _diabetes_err = _liver_err = _kidney_err = _heart_err = None
@@ -108,12 +126,11 @@ except Exception as e:
     logger.error(f"Failed to load kidney model/scaler: {_kidney_err}", exc_info=True)
 
 try:
-    heart_scaler = joblib.load(_h_scaler_path)
     heart_model = joblib.load(_heart_path)
-    logger.info("Heart disease model and scaler loaded successfully")
+    logger.info("Heart disease model loaded successfully (Random Forest - no scaler needed)")
 except Exception as e:
     _heart_err = str(e)
-    logger.error(f"Failed to load heart model/scaler: {_heart_err}", exc_info=True)
+    logger.error(f"Failed to load heart model: {_heart_err}", exc_info=True)
 # Bone fracture and Hugging Face models
 _bone_hf_model_id = 'Hemgg/bone-fracture-detection-using-xray'
 _bone_allowed_ext = {'.jpg', '.jpeg', '.png'}
@@ -210,6 +227,27 @@ def predict_diabetes():
                 logger.error(f"Error fetching hospitals: {str(e)}")
                 response['hospital_error'] = 'Unable to fetch nearby hospitals'
 
+        # Save prediction to database if user is logged in
+        from flask import session
+        if 'user_id' in session:
+            try:
+                pred = Prediction(
+                    user_id=session['user_id'],
+                    disease_type='diabetes',
+                    prediction_result=risk_level,
+                    probability=float(probability),
+                    risk_level=risk_level,
+                    input_data=data
+                )
+                db.session.add(pred)
+                db.session.commit()
+            except Exception as e:
+                logger.error(f"Failed to save prediction: {str(e)}")
+                try:
+                    db.session.rollback()
+                except:
+                    pass
+
         return jsonify(response)
 
     except Exception as e:
@@ -274,6 +312,27 @@ def predict_liver():
             except Exception as e:
                 logger.error(f"Error fetching hospitals: {str(e)}")
                 response['hospital_error'] = 'Unable to fetch nearby hospitals'
+
+        # Save prediction to database if user is logged in
+        from flask import session
+        if 'user_id' in session:
+            try:
+                pred = Prediction(
+                    user_id=session['user_id'],
+                    disease_type='liver',
+                    prediction_result=risk_level,
+                    probability=float(probability),
+                    risk_level=risk_level,
+                    input_data=data
+                )
+                db.session.add(pred)
+                db.session.commit()
+            except Exception as e:
+                logger.error(f"Failed to save prediction: {str(e)}")
+                try:
+                    db.session.rollback()
+                except:
+                    pass
 
         return jsonify(response)
 
@@ -356,6 +415,27 @@ def predict_kidney():
                 logger.error(f"Error fetching hospitals: {str(e)}")
                 response['hospital_error'] = 'Unable to fetch nearby hospitals'
 
+        # Save prediction to database if user is logged in
+        from flask import session
+        if 'user_id' in session:
+            try:
+                pred = Prediction(
+                    user_id=session['user_id'],
+                    disease_type='kidney',
+                    prediction_result=risk_level,
+                    probability=float(probability),
+                    risk_level=risk_level,
+                    input_data=data
+                )
+                db.session.add(pred)
+                db.session.commit()
+            except Exception as e:
+                logger.error(f"Failed to save prediction: {str(e)}")
+                try:
+                    db.session.rollback()
+                except:
+                    pass
+
         return jsonify(response)
 
     except Exception as e:
@@ -363,42 +443,33 @@ def predict_kidney():
 
 @app.route('/api/predict/heart', methods=['POST'])
 def predict_heart():
-    if heart_model is None or heart_scaler is None:
-        return jsonify({'error': 'Model not loaded properly'}), 503
+    if heart_model is None:
+        return jsonify({'error': 'Heart disease model not loaded properly'}), 503
 
     try:
         data = request.get_json()
         
-        # Extract features in the correct order
+        # Extract features in the correct order for cardio_random_forest.pkl
         features = [
-            float(data.get('BMI', 0)),
-            float(data.get('Smoking', 0)),
-            float(data.get('AlcoholDrinking', 0)),
-            float(data.get('Stroke', 0)),
-            float(data.get('PhysicalHealth', 0)),
-            float(data.get('MentalHealth', 0)),
-            float(data.get('DiffWalking', 0)),
-            float(data.get('Sex', 0)),
-            float(data.get('AgeCategory', 0)),
-            float(data.get('Race', 0)),
-            float(data.get('Diabetic', 0)),
-            float(data.get('PhysicalActivity', 0)),
-            float(data.get('GenHealth', 0)),
-            float(data.get('SleepTime', 0)),
-            float(data.get('Asthma', 0)),
-            float(data.get('KidneyDisease', 0)),
-            float(data.get('SkinCancer', 0))
+            float(data.get('age', 0)),           # age in years
+            float(data.get('height', 0)),        # height in cm
+            float(data.get('weight', 0)),        # weight in kg
+            float(data.get('gender', 0)),        # 1=Female, 2=Male
+            float(data.get('ap_hi', 0)),         # Systolic BP
+            float(data.get('ap_lo', 0)),         # Diastolic BP
+            float(data.get('cholesterol', 0)),   # 1=Normal, 2=Above Normal, 3=Well Above Normal
+            float(data.get('gluc', 0)),          # 1=Normal, 2=Above Normal, 3=Well Above Normal
+            float(data.get('smoke', 0)),         # 0=No, 1=Yes
+            float(data.get('alco', 0)),          # 0=No, 1=Yes
+            float(data.get('active', 0))         # 0=No, 1=Yes
         ]
 
         # Convert to numpy array and reshape
         features_array = np.array(features).reshape(1, -1)
         
-        # Scale the features
-        scaled_features = heart_scaler.transform(features_array)
-        
-        # Make prediction
-        prediction = heart_model.predict(scaled_features)[0]
-        probability = heart_model.predict_proba(scaled_features)[0][1]
+        # Make prediction (no scaling needed for Random Forest)
+        prediction = heart_model.predict(features_array)[0]
+        probability = heart_model.predict_proba(features_array)[0][1]
 
         # Determine risk level based on probability
         if probability >= 0.8:
@@ -414,7 +485,7 @@ def predict_heart():
             'prediction': int(prediction),
             'probability': float(probability),
             'risk_level': risk_level,
-            'message': f'{risk_level} risk of heart disease'
+            'message': f'{risk_level} risk of cardiovascular disease'
         }
 
         # Fetch nearby hospitals for Moderate, High, and Very High risk
@@ -430,9 +501,31 @@ def predict_heart():
                 logger.error(f"Error fetching hospitals: {str(e)}")
                 response['hospital_error'] = 'Unable to fetch nearby hospitals'
 
+        # Save prediction to database if user is logged in
+        from flask import session
+        if 'user_id' in session:
+            try:
+                pred = Prediction(
+                    user_id=session['user_id'],
+                    disease_type='heart',
+                    prediction_result=risk_level,
+                    probability=float(probability),
+                    risk_level=risk_level,
+                    input_data=data
+                )
+                db.session.add(pred)
+                db.session.commit()
+            except Exception as e:
+                logger.error(f"Failed to save prediction: {str(e)}")
+                try:
+                    db.session.rollback()
+                except:
+                    pass
+
         return jsonify(response)
 
     except Exception as e:
+        logger.error(f"Heart prediction error: {str(e)}", exc_info=True)
         return jsonify({'error': str(e)}), 400
 
 @app.route('/api/test', methods=['GET'])
@@ -459,7 +552,7 @@ def health():
             'diabetes': diabetes_model is not None,
             'liver': liver_model is not None,
             'kidney': kidney_model is not None and kidney_scaler is not None,
-            'heart': heart_model is not None and heart_scaler is not None
+            'heart': heart_model is not None
         },
         'errors': {
             'diabetes': _diabetes_err,
@@ -494,10 +587,6 @@ def predict_bone_fracture():
         preds = _bone_pipeline(img)
         logger.info(f"Model predictions: {preds}")
         
-        # The model returns predictions - we need to check what labels it uses
-        # Common labels: 'fractured', 'not fractured', 'normal', 'fracture', etc.
-        
-        # Use the highest confidence prediction
         if not preds:
             return jsonify({'error': 'Model returned no predictions'}), 500
         
@@ -507,21 +596,26 @@ def predict_bone_fracture():
         
         logger.info(f"Top prediction - Label: {label}, Score: {score}")
         
-        # Determine if it's a fracture based on label keywords
-        # Only classify as fracture if confidence is high AND label indicates fracture
+        # Only classify as fracture if confidence is high (>75%) AND label indicates fracture
         is_fracture = False
-        if score >= 0.75:  # High confidence threshold
+        if score >= 0.75:
             if 'fracture' in label and 'not' not in label and 'no' not in label:
                 is_fracture = True
+        
+        # If confidence is low (<60%), it's likely not an X-ray
+        if score < 0.60:
+            return jsonify({
+                'error': 'Invalid X-ray image',
+                'message': 'The uploaded image does not appear to be a valid bone X-ray. Please upload a clear X-ray image.',
+                'confidence': round(score * 100, 2)
+            }), 400
         
         norm_label = 'Fracture' if is_fracture else 'No Fracture'
         confidence_pct = round(score * 100.0, 2)
 
-        # Heuristic severity/urgency for UI chips
         severity = 'High' if norm_label == 'Fracture' and score >= 0.8 else ('Medium' if norm_label == 'Fracture' else 'Low')
         urgency = 'High' if norm_label == 'Fracture' and score >= 0.8 else ('Medium' if norm_label == 'Fracture' else 'Low')
 
-        # Recommendations and PDF-friendly structure expected by frontend
         recommendations = [
             'Consult an orthopedic specialist for a clinical evaluation.',
             'Consider confirmatory imaging (X-ray with multiple views, CT, or MRI) as advised by a clinician.',
@@ -540,7 +634,6 @@ def predict_bone_fracture():
             'urgency': urgency,
             'recommendations': recommendations,
             'disclaimer': 'AI-assisted screening only. Not a medical diagnosis. Always consult a qualified healthcare professional.',
-            # Detailed report for PDF export used by frontend
             'pdf_report': {
                 'patient_info': {
                     'test_type': 'Bone X-ray Screening',
@@ -575,6 +668,28 @@ def predict_bone_fracture():
                 ]
             }
         }
+
+        # Save prediction to database if user is logged in
+        from flask import session
+        if 'user_id' in session:
+            try:
+                pred = Prediction(
+                    user_id=session['user_id'],
+                    disease_type='bone_fracture',
+                    prediction_result=norm_label,
+                    probability=float(score),
+                    risk_level=severity,
+                    input_data={'confidence': confidence_pct, 'urgency': urgency}
+                )
+                db.session.add(pred)
+                db.session.commit()
+            except Exception as e:
+                logger.error(f"Failed to save prediction: {str(e)}")
+                try:
+                    db.session.rollback()
+                except:
+                    pass
+
         return jsonify(response)
     except Exception as e:
         logger.error(f"Bone fracture prediction error: {str(e)}", exc_info=True)
@@ -589,105 +704,61 @@ def groq_chat():
         if not user_message:
             return jsonify({'error': 'Message is required'}), 400
 
-        # Get Groq API key from environment variable
         GROQ_API_KEY = os.getenv('GROQ_API_KEY')
         
-        if not GROQ_API_KEY:
-            return jsonify({'error': 'GROQ_API_KEY not configured'}), 500
+        if not GROQ_API_KEY or not GROQ_AVAILABLE:
+            return jsonify({
+                'response': 'AI assistant is temporarily unavailable. Please consult a healthcare professional.'
+            }), 200
         
-        # Groq API endpoint
-        GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions'
+        client = Groq(api_key=GROQ_API_KEY)
+        
+        # Detect if this is a meal plan request
+        is_meal_plan = 'meal plan' in user_message.lower() or 'days' in user_message.lower()
+        
+        if is_meal_plan:
+            system_prompt = """You are a nutrition AI. Respond ONLY with valid JSON, no other text.
+Format: {"days":[{"day":1,"breakfast":"text","lunch":"text","dinner":"text"}],"avoidFoods":["text"],"nutritionTips":["text"]}
+Create exactly 7 days. Use Indian meals."""
+            max_tokens = 1500
+        else:
+            system_prompt = """You are a healthcare information assistant.
+Provide general medical information only. Do NOT diagnose or prescribe.
 
-        payload = {
-    "model": "llama-3.1-8b-instant",
-    "messages": [
-        {
-            "role": "system",
-            "content": (
-                """You are a healthcare information assistant for a hospital website.
-
-STRICT RULES:
-- Provide general medical information only
-- Do NOT diagnose or prescribe
-- Use neutral, non-alarming language
-- Keep content short and structured
-- Never exceed the given format
-
-RESPONSE FORMAT (MANDATORY):
+Format:
 Symptoms Overview:
-- <1–2 short points>
+- point
 
 What You Can Do Now:
-- <1–2 safe general actions>
+- action
 
 When to See a Doctor:
-- <clear medical escalation>
-
-Do NOT add extra sections.
-Do NOT add emojis.
-Do NOT add disclaimers unless requested.
-""")
-        },
-        {
-            "role": "user",
-            "content": user_message
-        }
-    ],
-    "temperature": 0.1,
-    "top_p": 0.9,
-    "max_tokens": 350,
-    "frequency_penalty": 0.2,
-    "presence_penalty": 0.0
-}
-
+- escalation"""
+            max_tokens = 350
         
-        headers = {
-            'Content-Type': 'application/json',
-            'Authorization': f'Bearer {GROQ_API_KEY}'
-        }
+        completion = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message}
+            ],
+            temperature=0.1,
+            max_tokens=max_tokens,
+            top_p=0.9
+        )
         
-        response = requests.post(GROQ_API_URL, json=payload, headers=headers, timeout=20)
+        answer = completion.choices[0].message.content.strip()
         
-        if response.status_code != 200:
-            logger.error(f"Groq API Error {response.status_code}: {response.text}")
-            return jsonify({
-                'error': 'Groq API failed',
-                'details': response.text
-            }), 500
-
-        groq_data = response.json()
-
-        choices = groq_data.get('choices', [])
-        if not choices:
-            return jsonify({'error': 'No response from Groq'}), 500
-
-        message = choices[0].get('message', {})
-        answer = message.get('content', '').strip()
-
         if not answer:
             return jsonify({'error': 'Empty response from Groq'}), 500
 
-        # Optional post-processing
-        answer = answer.replace("\n\n", "\n")
-
         return jsonify({'response': answer})
 
-    except requests.exceptions.Timeout:
-        return jsonify({'error': 'Groq API timeout'}), 504
-
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Network error: {str(e)}", exc_info=True)
-        return jsonify({
-            'error': 'Network error',
-            'details': str(e)
-        }), 500
-
     except Exception as e:
-        logger.error(f"Internal error: {str(e)}", exc_info=True)
+        logger.error(f"Groq error: {str(e)}", exc_info=True)
         return jsonify({
-            'error': 'Internal server error',
-            'details': str(e)
-        }), 500
+            'response': 'I apologize, but I am temporarily unavailable. For medical concerns, please consult a healthcare professional directly.'
+        }), 200
 
 @app.route('/api/hospitals/nearby', methods=['GET'])
 def get_nearby_hospitals():
@@ -1354,83 +1425,140 @@ def get_doctors():
 
         lat, lon = float(lat), float(lon)
 
-        overpass_query = f"""
-        [out:json][timeout:25];
-        (
-          node["amenity"="doctors"](around:20000,{lat},{lon});
-          node["amenity"="clinic"](around:20000,{lat},{lon});
-          way["amenity"="doctors"](around:20000,{lat},{lon});
-          way["amenity"="clinic"](around:20000,{lat},{lon});
-        );
-        out center meta;
-        """
+        # Try Overpass API with timeout and error handling
+        try:
+            overpass_url = "http://overpass-api.de/api/interpreter"
+            overpass_query = f"""
+            [out:json][timeout:5];
+            (
+              node["amenity"="doctors"](around:30000,{lat},{lon});
+              node["amenity"="clinic"](around:30000,{lat},{lon});
+            );
+            out body;
+            """
 
-        response = requests.post(
-            'https://overpass-api.de/api/interpreter',
-            data=overpass_query,
-            headers={'Content-Type': 'text/plain'},
-            timeout=30
-        )
+            response = requests.post(overpass_url, data={'data': overpass_query}, timeout=8)
+            
+            if response.status_code == 429:
+                logger.warning("Overpass API rate limit exceeded, using fallback data")
+                raise Exception("Rate limit")
+            
+            if response.status_code != 200:
+                raise Exception(f"API returned {response.status_code}")
 
-        if response.status_code != 200:
-            return jsonify({'error': 'Failed to fetch doctors data'}), 500
+            overpass_data = response.json()
+        except Exception as e:
+            logger.warning(f"Overpass API failed: {str(e)}, using fallback")
+            overpass_data = {'elements': []}
 
-        data = response.json()
         doctors = []
+        import random
 
-        for idx, element in enumerate(data.get('elements', [])):
+        def calculate_distance(lat1, lon1, lat2, lon2):
+            from math import radians, sin, cos, sqrt, atan2
+            R = 6371
+            dlat = radians(lat2 - lat1)
+            dlon = radians(lon2 - lon1)
+            a = sin(dlat/2)**2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon/2)**2
+            c = 2 * atan2(sqrt(a), sqrt(1-a))
+            return round(R * c, 2)
+
+        specializations = ['Cardiologist', 'General Physician', 'Orthopedic', 'Dermatologist', 'Neurologist', 'Pediatrician']
+
+        # Process Overpass data if available
+        for idx, element in enumerate(overpass_data.get('elements', [])):
             tags = element.get('tags', {})
-            name = tags.get('name', tags.get('operator', f'Medical Center {idx+1}'))
-
-            if element['type'] == 'node':
-                d_lat, d_lon = element['lat'], element['lon']
-            elif 'center' in element:
-                d_lat, d_lon = element['center']['lat'], element['center']['lon']
-            else:
+            name = tags.get('name', f"Dr. {random.choice(['Kumar', 'Sharma', 'Patel', 'Singh', 'Reddy'])}")
+            
+            doctor_lat = element.get('lat')
+            doctor_lon = element.get('lon')
+            
+            if not doctor_lat or not doctor_lon:
                 continue
 
-            distance = calculate_distance(lat, lon, d_lat, d_lon)
-
-            address_parts = []
-            for key in ['addr:street', 'addr:city', 'addr:postcode']:
-                if key in tags:
-                    address_parts.append(tags[key])
-            address = ', '.join(address_parts) if address_parts else 'Address not available'
-
-            spec = tags.get('healthcare:speciality', tags.get('speciality', 'General Physician'))
+            distance = calculate_distance(lat, lon, doctor_lat, doctor_lon)
+            rating = round(4.0 + random.random(), 1)
+            is_available = random.choice([True, True, True, False])
             
-            doctor = {
-                'id': idx + 1,
+            doctor_spec = tags.get('healthcare:speciality', random.choice(specializations))
+            if isinstance(doctor_spec, str) and ';' in doctor_spec:
+                doctor_spec = doctor_spec.split(';')[0]
+            
+            doctor_data = {
+                'id': f"doc_{element.get('id')}",
                 'name': name,
-                'specialization': spec.title(),
-                'hospital': tags.get('operator', name),
-                'latitude': d_lat,
-                'longitude': d_lon,
-                'distance': round(distance, 2),
-                'rating': round(3.5 + (hash(name) % 15) / 10, 1),
-                'available': (hash(name) % 3) != 0,
-                'consultation_types': ['video', 'in-person'] if (hash(name) % 2) == 0 else ['in-person'],
-                'address': address,
+                'specialization': doctor_spec if isinstance(doctor_spec, str) else random.choice(specializations),
+                'hospital': tags.get('operator', 'Medical Center'),
+                'latitude': doctor_lat,
+                'longitude': doctor_lon,
+                'distance': distance,
+                'rating': rating,
+                'available': is_available,
+                'consultation_types': ['video', 'in-person'],
+                'address': tags.get('addr:full', tags.get('addr:street', 'N/A')),
                 'phone': tags.get('phone', 'N/A')
             }
-            doctors.append(doctor)
+            
+            if specialization and specialization != 'All':
+                if specialization.lower() not in doctor_data['specialization'].lower():
+                    continue
+            
+            if min_rating and doctor_data['rating'] < min_rating:
+                continue
+            
+            if available_only and not doctor_data['available']:
+                continue
+            
+            doctors.append(doctor_data)
+
+        # Fallback: Generate mock doctors if API failed or returned few results
+        if len(doctors) < 5:
+            mock_doctors = [
+                {'name': 'Dr. Rajesh Kumar', 'spec': 'Cardiologist', 'hospital': 'City Heart Hospital', 'dist': 2.5},
+                {'name': 'Dr. Priya Sharma', 'spec': 'General Physician', 'hospital': 'Metro Medical Center', 'dist': 3.2},
+                {'name': 'Dr. Amit Patel', 'spec': 'Orthopedic', 'hospital': 'Bone Care Clinic', 'dist': 4.1},
+                {'name': 'Dr. Sneha Reddy', 'spec': 'Dermatologist', 'hospital': 'Skin Wellness Center', 'dist': 3.8},
+                {'name': 'Dr. Vikram Singh', 'spec': 'Neurologist', 'hospital': 'Neuro Care Hospital', 'dist': 5.5},
+                {'name': 'Dr. Anjali Verma', 'spec': 'Pediatrician', 'hospital': 'Children Health Clinic', 'dist': 2.9}
+            ]
+            
+            for idx, mock in enumerate(mock_doctors):
+                if len(doctors) >= 10:
+                    break
+                    
+                doctor_data = {
+                    'id': f"mock_{idx}",
+                    'name': mock['name'],
+                    'specialization': mock['spec'],
+                    'hospital': mock['hospital'],
+                    'latitude': lat + random.uniform(-0.05, 0.05),
+                    'longitude': lon + random.uniform(-0.05, 0.05),
+                    'distance': mock['dist'],
+                    'rating': round(4.0 + random.random(), 1),
+                    'available': random.choice([True, True, False]),
+                    'consultation_types': ['video', 'in-person'],
+                    'address': f"{mock['hospital']}, Medical District",
+                    'phone': f"+91-{random.randint(7000000000, 9999999999)}"
+                }
+                
+                if specialization and specialization != 'All':
+                    if specialization.lower() not in doctor_data['specialization'].lower():
+                        continue
+                
+                if min_rating and doctor_data['rating'] < min_rating:
+                    continue
+                
+                if available_only and not doctor_data['available']:
+                    continue
+                
+                doctors.append(doctor_data)
 
         doctors.sort(key=lambda x: x['distance'])
-
-        if specialization and specialization != 'All':
-            doctors = [d for d in doctors if specialization.lower() in d['specialization'].lower()]
-
-        if min_rating:
-            doctors = [d for d in doctors if d['rating'] >= min_rating]
-
-        if available_only:
-            doctors = [d for d in doctors if d['available']]
-
         return jsonify({'doctors': doctors[:20]})
 
     except Exception as e:
         logger.error(f"Error fetching doctors: {str(e)}", exc_info=True)
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Failed to fetch doctors'}), 500
 
 @app.route('/api/start-video-call', methods=['POST'])
 def start_video_call():
@@ -1470,6 +1598,72 @@ def start_video_call():
         logger.error(f"Error starting video call: {str(e)}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/symptom-checker', methods=['POST'])
+def symptom_checker():
+    try:
+        data = request.get_json()
+        symptoms = data.get('symptoms', '').strip()
+        duration = data.get('duration', '')
+        severity = data.get('severity', '')
+
+        if len(symptoms) < 10:
+            return jsonify({'error': 'Please provide more detailed symptoms (at least 10 characters)'}), 400
+
+        # Use Groq API for symptom analysis
+        GROQ_API_KEY = os.getenv('GROQ_API_KEY')
+        
+        if not GROQ_API_KEY or not GROQ_AVAILABLE:
+            return jsonify({'error': 'AI service temporarily unavailable'}), 503
+        
+        client = Groq(api_key=GROQ_API_KEY)
+        
+        prompt = f"""Analyze these symptoms and predict the top 3 most likely diseases with confidence scores.
+Symptoms: {symptoms}
+Duration: {duration}
+Severity: {severity}
+
+Respond ONLY with valid JSON in this format:
+{{
+  "predictions": [
+    {{"disease": "Disease Name", "confidence": 85.5, "risk": "High", "explanation": "Brief explanation"}},
+    {{"disease": "Disease Name", "confidence": 65.2, "risk": "Moderate"}},
+    {{"disease": "Disease Name", "confidence": 45.8, "risk": "Low"}}
+  ]
+}}
+
+Consider these diseases: Heart Disease, Diabetes, Liver Disease, Kidney Disease, Pneumonia, Asthma, Influenza, Migraine, Hypertension, Gastritis.
+Risk levels: High (>70%), Moderate (50-70%), Low (<50%)."""
+        
+        completion = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3,
+            max_tokens=500
+        )
+        
+        response_text = completion.choices[0].message.content.strip()
+        
+        # Parse JSON response
+        import json
+        import re
+        json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+        if json_match:
+            result = json.loads(json_match.group(0))
+            predictions = result.get('predictions', [])
+            
+            if predictions:
+                response = {
+                    'top_prediction': predictions[0],
+                    'other_conditions': predictions[1:3] if len(predictions) > 1 else []
+                }
+                return jsonify(response)
+        
+        return jsonify({'error': 'Unable to analyze symptoms'}), 500
+
+    except Exception as e:
+        logger.error(f"Symptom checker error: {str(e)}", exc_info=True)
+        return jsonify({'error': 'Failed to analyze symptoms', 'details': str(e)}), 500
+
 if __name__ == '__main__':
     logger.info("Starting Flask application")
-    app.run(debug=True) 
+    app.run(debug=True)

@@ -71,9 +71,10 @@ const Navbar = ({ onlyModels }) => {
         <BootstrapNavbar.Brand 
           as={RouterLink} 
           to="/" 
-          style={brandStyle}
+          style={{ ...brandStyle, display: 'flex', alignItems: 'center', gap: '10px' }}
           className="text-decoration-none animate-pulse"
         >
+          <img src="/logo.png" alt="Health AI Logo" style={{ width: '40px', height: '40px' }} />
           HEALTH AI
         </BootstrapNavbar.Brand>
         

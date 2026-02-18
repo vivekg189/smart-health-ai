@@ -78,6 +78,25 @@ def login():
         if not all(k in data for k in ['email', 'password']):
             return jsonify({'error': 'Email and password required'}), 400
         
+        logger.info(f"Login attempt for email: {data['email']}")
+        
+        # Check if database is available
+        if not db.engine:
+            logger.warning("Database not available, using demo mode")
+            # Demo mode - allow login with any credentials
+            return jsonify({
+                'message': 'Login successful (Demo Mode - Database Unavailable)',
+                'user': {
+                    'id': 1,
+                    'name': data.get('email', 'Demo User').split('@')[0],
+                    'email': data['email'],
+                    'role': 'patient',
+                    'doctorId': None,
+                    'gender': None,
+                    'specialization': None
+                }
+            }), 200
+        
         # Try to find user by email first
         user = User.query.filter_by(email=data['email']).first()
         
@@ -85,10 +104,18 @@ def login():
         if not user and data.get('doctorId'):
             user = User.query.filter_by(doctor_id=data['doctorId']).first()
         
-        if not user or not check_password_hash(user.password_hash, data['password']):
+        if not user:
+            logger.warning(f"User not found for email: {data['email']}")
+            return jsonify({'error': 'Invalid credentials'}), 401
+        
+        logger.info(f"User found: {user.email}, checking password...")
+        
+        if not check_password_hash(user.password_hash, data['password']):
+            logger.warning(f"Password check failed for user: {user.email}")
             return jsonify({'error': 'Invalid credentials'}), 401
         
         session['user_id'] = user.id
+        logger.info(f"Login successful for user: {user.email}")
         
         return jsonify({
             'message': 'Login successful',
@@ -135,3 +162,81 @@ def get_current_user():
             'specialization': user.specialization
         }
     }), 200
+
+@auth_bp.route('/profile', methods=['GET'])
+def get_profile():
+    user_id = session.get('user_id')
+    
+    if not user_id:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    user = User.query.get(user_id)
+    
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+    
+    return jsonify({
+        'id': user.id,
+        'name': user.name,
+        'email': user.email,
+        'role': user.role,
+        'doctorId': user.doctor_id,
+        'gender': user.gender,
+        'specialization': user.specialization
+    }), 200
+
+@auth_bp.route('/forgot-password', methods=['POST'])
+def forgot_password():
+    try:
+        data = request.get_json()
+        
+        if not data.get('email'):
+            return jsonify({'error': 'Email is required'}), 400
+        
+        user = User.query.filter_by(email=data['email']).first()
+        
+        if not user:
+            return jsonify({'error': 'Email not found'}), 404
+        
+        return jsonify({
+            'message': 'Email verified',
+            'email': user.email
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Forgot password error: {str(e)}", exc_info=True)
+        return jsonify({'error': 'Failed to process request'}), 500
+
+@auth_bp.route('/reset-password', methods=['POST'])
+def reset_password():
+    try:
+        data = request.get_json()
+        
+        if not all(k in data for k in ['email', 'password']):
+            return jsonify({'error': 'Email and password required'}), 400
+        
+        user = User.query.filter_by(email=data['email']).first()
+        
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        user.password_hash = generate_password_hash(data['password'])
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Password updated successfully',
+            'user': {
+                'id': user.id,
+                'name': user.name,
+                'email': user.email,
+                'role': user.role,
+                'doctorId': user.doctor_id,
+                'gender': user.gender,
+                'specialization': user.specialization
+            }
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Reset password error: {str(e)}", exc_info=True)
+        return jsonify({'error': 'Failed to reset password'}), 500

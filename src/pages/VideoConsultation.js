@@ -1,13 +1,16 @@
-import React, { useEffect, useRef } from 'react';
-import { Container, Typography, Box, Button } from '@mui/material';
+import React, { useEffect, useRef, useState } from 'react';
+import { Container, Typography, Box, Button, Paper, TextField, IconButton, List, ListItem, ListItemText } from '@mui/material';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowBack } from '@mui/icons-material';
+import { ArrowBack, Send } from '@mui/icons-material';
 
 const VideoConsultation = () => {
   const jitsiContainerRef = useRef(null);
   const jitsiApiRef = useRef(null);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const [messages, setMessages] = useState([]);
+  const [newMessage, setNewMessage] = useState('');
+  const messagesEndRef = useRef(null);
 
   const roomId = searchParams.get('room');
   const doctorName = searchParams.get('doctor');
@@ -51,15 +54,12 @@ const VideoConsultation = () => {
           TOOLBAR_BUTTONS: [
             'microphone',
             'camera',
-            'closedcaptions',
             'desktop',
             'fullscreen',
             'fodeviceselection',
             'hangup',
-            'chat',
             'settings',
             'videoquality',
-            'filmstrip',
             'tileview'
           ],
           SHOW_JITSI_WATERMARK: false,
@@ -75,6 +75,10 @@ const VideoConsultation = () => {
       jitsiApiRef.current.addEventListener('videoConferenceLeft', () => {
         navigate('/meet-doctor');
       });
+
+      jitsiApiRef.current.addEventListener('incomingMessage', (event) => {
+        setMessages(prev => [...prev, { text: event.message, sender: event.from, time: new Date() }]);
+      });
     };
 
     loadJitsiScript();
@@ -86,8 +90,20 @@ const VideoConsultation = () => {
     };
   }, [roomId, navigate]);
 
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const handleSendMessage = () => {
+    if (newMessage.trim() && jitsiApiRef.current) {
+      jitsiApiRef.current.executeCommand('sendChatMessage', newMessage);
+      setMessages(prev => [...prev, { text: newMessage, sender: 'You', time: new Date() }]);
+      setNewMessage('');
+    }
+  };
+
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
+    <Container maxWidth="xl" sx={{ py: 4 }}>
       <Box sx={{ mb: 3 }}>
         <Button
           startIcon={<ArrowBack />}
@@ -108,15 +124,50 @@ const VideoConsultation = () => {
         </Typography>
       )}
 
-      <Box
-        ref={jitsiContainerRef}
-        sx={{
-          mt: 3,
-          borderRadius: 2,
-          overflow: 'hidden',
-          boxShadow: 3
-        }}
-      />
+      <Box sx={{ display: 'flex', gap: 2, mt: 3 }}>
+        <Box
+          ref={jitsiContainerRef}
+          sx={{
+            flex: 2,
+            borderRadius: 2,
+            overflow: 'hidden',
+            boxShadow: 3,
+            minHeight: 600
+          }}
+        />
+
+        <Paper sx={{ flex: 1, display: 'flex', flexDirection: 'column', height: 600 }}>
+          <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
+            <Typography variant="h6">Chat</Typography>
+          </Box>
+          
+          <List sx={{ flex: 1, overflow: 'auto', p: 2 }}>
+            {messages.map((msg, idx) => (
+              <ListItem key={idx} sx={{ flexDirection: 'column', alignItems: 'flex-start', py: 1 }}>
+                <Typography variant="caption" color="text.secondary">
+                  {msg.sender} • {msg.time.toLocaleTimeString()}
+                </Typography>
+                <ListItemText primary={msg.text} />
+              </ListItem>
+            ))}
+            <div ref={messagesEndRef} />
+          </List>
+
+          <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider', display: 'flex', gap: 1 }}>
+            <TextField
+              fullWidth
+              size="small"
+              value={newMessage}
+              onChange={(e) => setNewMessage(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+              placeholder="Type a message..."
+            />
+            <IconButton color="primary" onClick={handleSendMessage}>
+              <Send />
+            </IconButton>
+          </Box>
+        </Paper>
+      </Box>
     </Container>
   );
 };

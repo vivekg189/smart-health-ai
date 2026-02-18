@@ -64,19 +64,13 @@ const FindButton = styled(Button)(({ theme }) => ({
   }
 }));
 
-const HospitalCard = styled(Card)(({ theme, clickable }) => ({
+const HospitalCard = styled(Card)(({ theme }) => ({
   marginBottom: theme.spacing(2),
   backgroundColor: '#fff5f5',
   borderRadius: 12,
   border: '1px solid #fed7d7',
-  cursor: clickable ? 'pointer' : 'default',
-  transition: clickable ? 'all 0.3s ease' : 'none',
-  '&:hover': clickable ? {
-    backgroundColor: '#fef5e7',
-    borderColor: '#f6ad55',
-    transform: 'translateY(-2px)',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
-  } : {}
+  cursor: 'default',
+  transition: 'none'
 }));
 
 const HospitalFinder = () => {
@@ -256,7 +250,6 @@ const HospitalFinder = () => {
           {hospitals.map((hospital, index) => (
             <HospitalCard
               key={index}
-              clickable={false}
             >
               <CardContent sx={{ p: 3 }}>
                 <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>

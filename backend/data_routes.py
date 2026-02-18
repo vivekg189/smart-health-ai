@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify, session
-from models import User, Prediction, Consultation, MedicalNote, DoctorAvailability
+from models import User, Prediction, Consultation, MedicalNote, DoctorAvailability, Appointment
 from config import db
 from datetime import datetime
 import logging
@@ -177,3 +177,61 @@ def update_availability():
         db.session.rollback()
         logger.error(f"Update availability error: {str(e)}", exc_info=True)
         return jsonify({'error': 'Failed to update availability'}), 500
+
+@data_bp.route('/patient-summary/<int:appointment_id>', methods=['GET'])
+@require_auth
+def get_patient_summary(appointment_id):
+    try:
+        user_id = session.get('user_id')
+        user = User.query.get(user_id)
+        
+        if user.role != 'doctor':
+            return jsonify({'error': 'Unauthorized'}), 403
+        
+        appointment = Appointment.query.get(appointment_id)
+        if not appointment or appointment.doctor_id != user_id:
+            return jsonify({'error': 'Appointment not found'}), 404
+        
+        patient_id = appointment.patient_id
+        predictions = Prediction.query.filter_by(user_id=patient_id).order_by(Prediction.created_at.desc()).limit(5).all()
+        consultations = Appointment.query.filter_by(patient_id=patient_id, status='completed').count()
+        
+        return jsonify({
+            'predictions': [{
+                'disease_type': p.disease_type,
+                'risk_level': p.risk_level,
+                'created_at': p.created_at.isoformat()
+            } for p in predictions],
+            'consultation_count': consultations
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Get patient summary error: {str(e)}", exc_info=True)
+        return jsonify({'error': 'Failed to fetch patient summary'}), 500
+
+@data_bp.route('/registered-doctors', methods=['GET'])
+def get_registered_doctors():
+    try:
+        doctors = User.query.filter_by(role='doctor').all()
+        
+        result = []
+        for doctor in doctors:
+            availability = DoctorAvailability.query.filter_by(doctor_id=doctor.id).first()
+            
+            result.append({
+                'id': doctor.id,
+                'name': doctor.name,
+                'specialization': doctor.specialization or 'General Physician',
+                'email': doctor.email,
+                'phone': doctor.phone or 'N/A',
+                'available': availability.is_available if availability else True,
+                'consultation_fee': availability.consultation_fee if availability else None,
+                'consultation_types': ['video', 'in-person'],
+                'rating': 4.5
+            })
+        
+        return jsonify({'doctors': result}), 200
+        
+    except Exception as e:
+        logger.error(f"Get registered doctors error: {str(e)}", exc_info=True)
+        return jsonify({'error': 'Failed to fetch doctors'}), 500

@@ -24,13 +24,18 @@ import {
   Cancel,
   Directions
 } from '@mui/icons-material';
+import { useAuth } from '../context/AuthContext';
+import AppointmentFormModal from './AppointmentFormModal';
 
 const MeetDoctor = () => {
+  const { user } = useAuth();
   const [doctors, setDoctors] = useState([]);
   const [filteredDoctors, setFilteredDoctors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [userLocation, setUserLocation] = useState(null);
+  const [showAppointmentForm, setShowAppointmentForm] = useState(false);
+  const [selectedDoctor, setSelectedDoctor] = useState(null);
 
   const [filters, setFilters] = useState({
     specialization: '',
@@ -56,10 +61,12 @@ const MeetDoctor = () => {
     if (userLocation) {
       fetchDoctors();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userLocation]);
 
   useEffect(() => {
     applyFilters();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doctors, filters]);
 
   const getUserLocation = () => {
@@ -143,35 +150,24 @@ const MeetDoctor = () => {
   };
 
   const handleStartVideoCall = async (doctor) => {
+    if (!user) {
+      alert('Please login to book an appointment');
+      return;
+    }
+
     if (!doctor.available || !doctor.consultation_types.includes('video')) {
       alert('Video consultation not available for this doctor');
       return;
     }
 
-    try {
-      const response = await fetch('http://localhost:5000/api/start-video-call', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ doctor_id: doctor.id })
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        window.location.href = `/video-consultation?room=${data.room_id}&doctor=${encodeURIComponent(data.doctor_name)}`;
-      } else {
-        alert(data.error || 'Failed to start video call');
-      }
-    } catch (err) {
-      alert('Error starting video call');
-      console.error(err);
-    }
+    setSelectedDoctor(doctor);
+    setShowAppointmentForm(true);
   };
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
       <Typography variant="h3" gutterBottom align="center" sx={{ mb: 4, fontWeight: 'bold' }}>
-        Meet a Doctor
+        Nearby Doctors
       </Typography>
 
       {error && (
@@ -348,6 +344,16 @@ const MeetDoctor = () => {
           )}
         </>
       )}
+
+      <AppointmentFormModal
+        open={showAppointmentForm}
+        onClose={() => {
+          setShowAppointmentForm(false);
+          setSelectedDoctor(null);
+        }}
+        doctor={selectedDoctor}
+        patientName={user?.name || ''}
+      />
     </Container>
   );
 };

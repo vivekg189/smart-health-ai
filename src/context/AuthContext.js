@@ -10,20 +10,22 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const storedUser = localStorage.getItem('user');
-    if (storedUser) {
-      try {
-        setUser(JSON.parse(storedUser));
-      } catch (e) {
-        localStorage.removeItem('user');
-      }
-    }
-    setLoading(false);
+    // Check session with backend on mount
+    fetch('http://localhost:5000/api/auth/me', {
+      credentials: 'include'
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.user) {
+          setUser(data.user);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, []);
 
   const login = (userData) => {
     setUser(userData);
-    localStorage.setItem('user', JSON.stringify(userData));
   };
 
   const logout = async () => {
@@ -36,7 +38,6 @@ export const AuthProvider = ({ children }) => {
       console.error('Logout error:', error);
     }
     setUser(null);
-    localStorage.removeItem('user');
     window.location.href = '/';
   };
 

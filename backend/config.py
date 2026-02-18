@@ -19,9 +19,9 @@ def init_db(app):
     app.config['SQLALCHEMY_DATABASE_URI'] = database_url
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key')
-    db.init_app(app)
     
     try:
+        db.init_app(app)
         with app.app_context():
             db.create_all()
         print("✅ Database connected successfully")

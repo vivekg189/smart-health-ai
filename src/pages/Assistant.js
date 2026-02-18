@@ -37,19 +37,22 @@ const PageContainer = styled(Container)(({ theme }) => ({
   minHeight: '100vh',
   paddingTop: theme.spacing(2),
   paddingBottom: theme.spacing(4),
+  background: 'linear-gradient(135deg, #E6F7F5 0%, #DCEAF2 100%)',
 }));
 
 const HeaderSection = styled(Box)(({ theme }) => ({
   textAlign: 'center',
   marginBottom: theme.spacing(4),
   padding: theme.spacing(3),
-  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+  background: 'rgba(255, 255, 255, 0.2)',
+  backdropFilter: 'blur(12px)',
+  border: '1px solid rgba(255, 255, 255, 0.3)',
   borderRadius: 16,
-  color: 'white',
+  color: '#2C3E50',
 }));
 
 const GradientTitle = styled(Typography)(({ theme }) => ({
-  background: 'linear-gradient(45deg, #ffffff 30%, #e3f2fd 70%)',
+  background: 'linear-gradient(135deg, #1E8E6A 0%, #2BBF9F 100%)',
   WebkitBackgroundClip: 'text',
   WebkitTextFillColor: 'transparent',
   backgroundClip: 'text',
@@ -58,21 +61,27 @@ const GradientTitle = styled(Typography)(({ theme }) => ({
 }));
 
 const StyledCard = styled(Card)(({ theme }) => ({
-  borderRadius: 12,
-  boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
-  border: '1px solid rgba(0,0,0,0.05)',
+  borderRadius: 20,
+  background: 'rgba(255, 255, 255, 0.15)',
+  backdropFilter: 'blur(12px)',
+  border: '1px solid rgba(255, 255, 255, 0.3)',
+  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
 }));
 
 const GenerateButton = styled(Button)(({ theme }) => ({
-  borderRadius: 8,
-  padding: '10px 24px',
+  borderRadius: 50,
+  padding: '14px 32px',
   fontSize: '1rem',
   fontWeight: 600,
-  background: 'linear-gradient(45deg, #1a237e 30%, #4a148c 90%)',
+  background: 'linear-gradient(135deg, #1E8E6A, #2BBF9F)',
   color: 'white',
   textTransform: 'none',
+  boxShadow: '0 6px 20px rgba(30, 142, 106, 0.3)',
+  transition: 'all 0.3s ease',
   '&:hover': {
-    background: 'linear-gradient(45deg, #283593 30%, #6a1b9a 90%)',
+    background: 'linear-gradient(135deg, #1a7a5c, #26a88d)',
+    transform: 'translateY(-2px)',
+    boxShadow: '0 8px 25px rgba(30, 142, 106, 0.4)',
   },
   '&:disabled': {
     background: '#ccc',
@@ -81,7 +90,7 @@ const GenerateButton = styled(Button)(({ theme }) => ({
 
 const SectionTitle = styled(Typography)(({ theme }) => ({
   fontWeight: 600,
-  color: '#1a237e',
+  color: '#2C3E50',
   marginBottom: theme.spacing(2),
   display: 'flex',
   alignItems: 'center',
@@ -91,9 +100,10 @@ const SectionTitle = styled(Typography)(({ theme }) => ({
 const MealCard = styled(Paper)(({ theme }) => ({
   padding: theme.spacing(2),
   marginBottom: theme.spacing(1.5),
-  backgroundColor: '#f8f9ff',
-  borderRadius: 8,
-  border: '1px solid #e3f2fd',
+  background: 'rgba(255, 255, 255, 0.25)',
+  backdropFilter: 'blur(8px)',
+  borderRadius: 12,
+  border: '1px solid rgba(255, 255, 255, 0.3)',
 }));
 
 const Assistant = () => {
@@ -122,7 +132,8 @@ const Assistant = () => {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    setApiKey('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');
+    // API key should come from backend, not hardcoded in frontend
+    setApiKey('');
   }, []);
 
   const handleInputChange = (field) => (event) => {
@@ -153,10 +164,10 @@ const Assistant = () => {
     
     const healthRiskText = healthRisks.length > 0 ? healthRisks.join(', ') : 'general health';
     
-    return `You must respond with ONLY valid JSON. Create a 7-day Indian ${foodPreference} meal plan for health considerations: ${healthRiskText}.
+    return `Create a 7-day Indian ${foodPreference} meal plan for: ${healthRiskText}. Return ONLY valid JSON, no other text.
 
-Response format (copy exactly):
-{"days":[{"day":1,"breakfast":"Indian breakfast","lunch":"Indian lunch","dinner":"Indian dinner"},{"day":2,"breakfast":"Indian breakfast","lunch":"Indian lunch","dinner":"Indian dinner"},{"day":3,"breakfast":"Indian breakfast","lunch":"Indian lunch","dinner":"Indian dinner"},{"day":4,"breakfast":"Indian breakfast","lunch":"Indian lunch","dinner":"Indian dinner"},{"day":5,"breakfast":"Indian breakfast","lunch":"Indian lunch","dinner":"Indian dinner"},{"day":6,"breakfast":"Indian breakfast","lunch":"Indian lunch","dinner":"Indian dinner"},{"day":7,"breakfast":"Indian breakfast","lunch":"Indian lunch","dinner":"Indian dinner"}],"avoidFoods":["food1","food2"],"nutritionTips":["tip1","tip2"]}`;
+Format:
+{"days":[{"day":1,"breakfast":"meal","lunch":"meal","dinner":"meal"}],"avoidFoods":["item"],"nutritionTips":["tip"]}`;
   };
 
   const generateFallbackPlan = (userData) => {
@@ -221,81 +232,29 @@ Response format (copy exactly):
   };
 
   const callLLMAPI = async (prompt) => {
-    try {
-      console.log('API Key:', apiKey);
-      console.log('Prompt:', prompt);
-      
-      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-          model: 'llama-3.1-8b-instant',
-          messages: [{
-            role: 'user',
-            content: prompt
-          }],
-          max_tokens: 1000,
-          temperature: 0.3
-        })
-      });
+    const response = await fetch('http://localhost:5000/api/groq-chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ message: prompt })
+    });
 
-      console.log('Response status:', response.status);
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.log('Error response:', errorData);
-        throw new Error(`API Error: ${response.status} - ${errorData.error?.message}`);
-      }
+    if (!response.ok) throw new Error(`API Error: ${response.status}`);
 
-      const data = await response.json();
-      console.log('Success response:', data);
-      
-      const content = data.choices[0].message.content.trim();
-      console.log('Raw content:', content);
-      console.log('Content length:', content.length);
-      console.log('First 100 chars:', content.substring(0, 100));
-      console.log('Last 100 chars:', content.substring(content.length - 100));
-      
-      // Try to parse as direct JSON
-      try {
-        const parsed = JSON.parse(content);
-        console.log('Direct parse SUCCESS');
-        return parsed;
-      } catch (parseError) {
-        console.log('Direct parse failed:', parseError.message);
-        
-        // Look for JSON anywhere in the response
-        const jsonStart = content.indexOf('{');
-        const jsonEnd = content.lastIndexOf('}');
-        
-        console.log('JSON start position:', jsonStart);
-        console.log('JSON end position:', jsonEnd);
-        
-        if (jsonStart !== -1 && jsonEnd !== -1) {
-          const jsonStr = content.substring(jsonStart, jsonEnd + 1);
-          console.log('Extracted JSON length:', jsonStr.length);
-          console.log('Extracted JSON:', jsonStr);
-          
-          try {
-            const parsed = JSON.parse(jsonStr);
-            console.log('Extracted parse SUCCESS');
-            return parsed;
-          } catch (extractError) {
-            console.log('Extracted parse failed:', extractError.message);
-            throw new Error(`JSON parse failed: ${extractError.message}`);
-          }
-        } else {
-          console.log('No JSON braces found in content');
-          throw new Error('No JSON found in response');
-        }
-      }
-    } catch (error) {
-      console.error('Full error:', error);
-      throw error;
-    }
+    const data = await response.json();
+    let content = data.response.trim();
+    
+    // Remove markdown code blocks
+    content = content.replace(/```json\s*/g, '').replace(/```\s*/g, '');
+    
+    // Extract JSON
+    const jsonStart = content.indexOf('{');
+    const jsonEnd = content.lastIndexOf('}');
+    
+    if (jsonStart === -1 || jsonEnd === -1) throw new Error('No JSON found');
+    
+    const jsonStr = content.substring(jsonStart, jsonEnd + 1);
+    return JSON.parse(jsonStr);
   };
 
   const generateMealPlan = async () => {
@@ -303,17 +262,15 @@ Response format (copy exactly):
     setError('');
     
     try {
-      // First try to get AI-generated meal plan
-      if (apiKey) {
-        const prompt = generateLLMPrompt(formData);
-        const aiMealPlan = await callLLMAPI(prompt);
-        setMealPlan(aiMealPlan);
-        setLoading(false);
-        return;
-      }
+      // Try to get AI-generated meal plan via backend
+      const prompt = generateLLMPrompt(formData);
+      const aiMealPlan = await callLLMAPI(prompt);
+      setMealPlan(aiMealPlan);
+      setLoading(false);
+      return;
     } catch (error) {
-      console.log('AI generation failed, falling back to predefined plan:', error.message);
-      setError('AI service unavailable, using fallback meal plan');
+      console.log('AI generation failed, using fallback plan:', error.message);
+      setError('Using fallback meal plan');
     }
     
     // Fallback to predefined meal plan
@@ -344,15 +301,10 @@ Response format (copy exactly):
           <GradientTitle variant="h3" component="h1">
             NutriMind AI
           </GradientTitle>
-          <Typography variant="h6" sx={{ opacity: 0.9 }}>
+          <Typography variant="h6" sx={{ opacity: 0.9, color: '#34495E' }}>
             Personalized Indian meal plans powered by AI
           </Typography>
         </Box>
-        {!apiKey && (
-          <Alert severity="warning" sx={{ mt: 2, backgroundColor: 'rgba(255,255,255,0.1)', color: 'white' }}>
-            <strong>API Key Required:</strong> Please configure your Groq API key for AI-powered meal planning.
-          </Alert>
-        )}
       </HeaderSection>
 
       <Grid container spacing={3} direction="column" alignItems="center">

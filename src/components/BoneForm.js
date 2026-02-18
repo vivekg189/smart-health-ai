@@ -22,6 +22,7 @@ import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import MedicalServicesIcon from '@mui/icons-material/MedicalServices';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import { jsPDF } from 'jspdf';
+import { generateMedicalReport } from '../utils/reportGenerator';
 
 // Styled Components
 const FormContainer = styled(Box)(({ theme }) => ({
@@ -251,12 +252,20 @@ const BoneForm = () => {
       clearInterval(progressInterval);
       setUploadProgress(100);
       
-      if (!response.ok) throw new Error('Prediction failed.');
       const data = await response.json();
+      
+      if (!response.ok) {
+        setError(data.message || data.error || 'Please upload a valid X-ray image.');
+        setUploadProgress(0);
+        return;
+      }
       
       setTimeout(() => {
         setResult(data);
         setUploadProgress(0);
+        
+        // Save prediction to database
+        savePrediction(data);
       }, 500);
       
     } catch (err) {
@@ -269,129 +278,14 @@ const BoneForm = () => {
   };
 
   const generatePDF = () => {
-    if (!result || !result.pdf_report) return;
+    if (!result) return;
     
-    const doc = new jsPDF();
-    const report = result.pdf_report;
+    // Use the professional report generator
+    const formData = {
+      confidence: (result.confidence * 100).toFixed(1)
+    };
     
-    // Header with styling
-    doc.setFontSize(20);
-    doc.setFont(undefined, 'bold');
-    doc.setTextColor(102, 126, 234);
-    doc.text('🏥 Bone Fracture Detection Report', 20, 25);
-    
-    // Add a line under header
-    doc.setDrawColor(102, 126, 234);
-    doc.setLineWidth(0.5);
-    doc.line(20, 30, 190, 30);
-    
-    // Patient Info Section
-    doc.setFontSize(14);
-    doc.setFont(undefined, 'bold');
-    doc.setTextColor(0, 0, 0);
-    doc.text('📋 Patient Information', 20, 45);
-    doc.setFontSize(11);
-    doc.setFont(undefined, 'normal');
-    let yPos = 55;
-    doc.text(`Test Type: ${report.patient_info.test_type}`, 25, yPos);
-    yPos += 7;
-    doc.text(`Test Date: ${report.patient_info.test_date}`, 25, yPos);
-    yPos += 7;
-    doc.text(`Analysis Method: ${report.patient_info.analysis_method}`, 25, yPos);
-    yPos += 15;
-    
-    // Results Section
-    doc.setFontSize(14);
-    doc.setFont(undefined, 'bold');
-    doc.setTextColor(76, 175, 80);
-    doc.text('📊 Analysis Results', 20, yPos);
-    yPos += 10;
-    doc.setFontSize(11);
-    doc.setFont(undefined, 'normal');
-    doc.setTextColor(0, 0, 0);
-    doc.text(`Prediction: ${report.results.prediction}`, 25, yPos);
-    yPos += 7;
-    doc.text(`Confidence Score: ${report.results.confidence_score}`, 25, yPos);
-    yPos += 7;
-    doc.text(`Severity Level: ${report.results.severity_level}`, 25, yPos);
-    yPos += 7;
-    doc.text(`Urgency Level: ${report.results.urgency_level}`, 25, yPos);
-    yPos += 15;
-    
-    // Clinical Summary
-    doc.setFontSize(14);
-    doc.setFont(undefined, 'bold');
-    doc.setTextColor(255, 152, 0);
-    doc.text('🔍 Clinical Summary', 20, yPos);
-    yPos += 10;
-    doc.setFontSize(11);
-    doc.setFont(undefined, 'normal');
-    doc.setTextColor(0, 0, 0);
-    doc.text(`Finding: ${report.clinical_summary.finding}`, 25, yPos, { maxWidth: 160 });
-    yPos += 15;
-    
-    // Recommendations
-    doc.setFont(undefined, 'bold');
-    doc.text('💡 Recommendations:', 25, yPos);
-    yPos += 8;
-    doc.setFont(undefined, 'normal');
-    report.clinical_summary.recommendations.forEach((rec, index) => {
-      doc.text(`• ${rec}`, 30, yPos, { maxWidth: 155 });
-      yPos += 7;
-    });
-    yPos += 10;
-    
-    // Next Steps
-    doc.setFont(undefined, 'bold');
-    doc.text('🎯 Next Steps:', 25, yPos);
-    yPos += 8;
-    doc.setFont(undefined, 'normal');
-    report.clinical_summary.next_steps.forEach((step, index) => {
-      doc.text(`• ${step}`, 30, yPos, { maxWidth: 155 });
-      yPos += 7;
-    });
-    yPos += 15;
-    
-    // Technical Details
-    doc.setFontSize(14);
-    doc.setFont(undefined, 'bold');
-    doc.setTextColor(156, 39, 176);
-    doc.text('⚙️ Technical Details', 20, yPos);
-    yPos += 10;
-    doc.setFontSize(11);
-    doc.setFont(undefined, 'normal');
-    doc.setTextColor(0, 0, 0);
-    doc.text(`Model: ${report.technical_details.model_name}`, 25, yPos);
-    yPos += 7;
-    doc.text(`Accuracy: ${report.technical_details.model_accuracy}`, 25, yPos);
-    yPos += 7;
-    doc.text(`Processing: ${report.technical_details.image_processed}`, 25, yPos);
-    yPos += 7;
-    doc.text(`Analysis Time: ${report.technical_details.analysis_time}`, 25, yPos);
-    yPos += 20;
-    
-    // Disclaimer
-    doc.setFontSize(12);
-    doc.setFont(undefined, 'bold');
-    doc.setTextColor(244, 67, 54);
-    doc.text('⚠️ Important Disclaimer', 20, yPos);
-    yPos += 10;
-    doc.setFontSize(9);
-    doc.setFont(undefined, 'normal');
-    doc.setTextColor(0, 0, 0);
-    report.disclaimer.forEach((disclaimer, index) => {
-      doc.text(`• ${disclaimer}`, 25, yPos, { maxWidth: 160 });
-      yPos += 5;
-    });
-    
-    // Footer
-    doc.setFontSize(8);
-    doc.setTextColor(128, 128, 128);
-    doc.text('Generated by Healthcare AI System', 20, 280);
-    doc.text(`Report ID: ${Date.now()}`, 150, 280);
-    
-    // Save the PDF
-    doc.save(`bone_fracture_report_${new Date().toISOString().split('T')[0]}.pdf`);
+    generateMedicalReport('bone', formData, result);
   };
 
   const getSeverityLevel = (prediction, confidence) => {
@@ -399,6 +293,25 @@ const BoneForm = () => {
       return confidence > 0.8 ? 'high' : 'medium';
     }
     return 'low';
+  };
+
+  const savePrediction = async (predictionData) => {
+    try {
+      await fetch('http://localhost:5000/api/data/predictions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          disease_type: 'Bone Fracture',
+          prediction_result: predictionData.prediction,
+          probability: predictionData.confidence,
+          risk_level: predictionData.severity_level,
+          input_data: { file_name: file?.name }
+        })
+      });
+    } catch (err) {
+      console.error('Failed to save prediction:', err);
+    }
   };
 
   return (
@@ -563,11 +476,10 @@ const BoneForm = () => {
                       variant="contained"
                       startIcon={<DownloadIcon />}
                       onClick={generatePDF}
-                      disabled={!result.pdf_report}
                       fullWidth
                       sx={{ mt: 3 }}
                     >
-                      Download Detailed Report
+                      Download Medical Report
                     </DownloadButton>
                   </CardContent>
                 </ResultCard>
