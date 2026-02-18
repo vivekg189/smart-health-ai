@@ -1,0 +1,325 @@
+PROJECT TITLE
+-------------
+AI-Powered Healthcare Risk Prediction & Assistance Platform
+
+HIGH-LEVEL SUMMARY
+------------------
+This project is an end-to-end healthcare web platform that helps patients:
+- Assess risk for common diseases (diabetes, heart, liver, kidney, bone fractures) using trained ML models.
+- Get nearby hospital and specialist recommendations based on their location and risk level.
+- Book and attend video consultations with doctors.
+- Analyze uploaded lab reports (PDF/images) and extract key medical parameters with explanations.
+- Use an AI chatbot and symptom checker for educational, non-diagnostic guidance.
+
+It has:
+- **Frontend**: React SPA (patient & doctor dashboards, forms, visualizations, chat, video UI).
+- **Backend**: Flask API (ML inference, OCR/report analysis, hospital search, AI integration, auth, appointments).
+- **Database**: SQLAlchemy models for users, predictions, appointments, doctor availability, etc.
+
+FRONTEND MODULES (REACT)
+------------------------
+Entry & Shell
+- `index.js`: React entry point, mounts the app and applies global Material-UI baseline styles.
+- `App.js`: Central router and page shell.
+  - Wraps the app with `AuthProvider` (auth context).
+  - Uses `react-router-dom` `Routes` and `Route` to define navigation.
+  - Wraps protected patient and doctor routes with `ProtectedRoute` and role-based layouts (`PatientLayout`, `DoctorLayout`).
+  - Controls when the `Navbar` and `Footer` are visible depending on the current path.
+  - Globally embeds the `Chatbot` so it is available on all pages.
+
+Authentication & Authorization
+- `context/AuthContext.js`:
+  - Holds logged-in user state in React context.
+  - On load, reads cached user from `localStorage` and then verifies the session with `GET /api/auth/me`.
+  - Exposes `login(userData)` and `logout()` helpers.
+  - On logout, calls `POST /api/auth/logout`, clears `localStorage`, resets user, and redirects to `/`.
+- `components/ProtectedRoute.js`:
+  - Wrapper component that only renders its children when the user is authenticated and has one of the allowed roles (`patient`/`doctor`).
+  - Redirects unauthenticated users to `/auth`.
+
+Global Layout & Navigation
+- `components/Navbar.js`: Top navigation bar used on public and some internal pages; shows links to pages such as Home, Models, Assistant, Hospital Finder, etc. Supports a “models only” mode for info pages.
+- `components/Footer.js`: Common footer with links and branding.
+- `components/PatientLayout.js`: Layout shell for all patient routes (dashboard, models, assistant, hospital finder, etc.). Provides consistent spacing and look-and-feel.
+- `components/DoctorLayout.js`: Layout shell for doctor routes (doctor dashboard, consultations, prescriptions, etc.).
+
+Patient Experience
+- `pages/dashboards/PatientDashboard.js`:
+  - Main logged-in patient home.
+  - Fetches:
+    - Appointments: `GET /api/appointments/patient`.
+    - Predictions history: `GET /api/data/predictions`.
+    - Registered doctors: `GET /api/data/registered-doctors`.
+    - User profile: `GET /api/auth/profile`.
+  - Builds:
+    - **Health Score** (0–100) derived from recent prediction risk levels.
+    - **Next Appointment** card with countdown and “Join” button for accepted future video consults.
+    - **Health Brief** section that generates a one-page textual summary for sharing with doctors; can be copied to clipboard.
+    - **Care Journey Map** (Assess → Review → Consult → Track), showing where the patient is in their care journey.
+    - **Recent Health Assessments** list with colored risk bars per disease.
+    - **AI Health Copilot**:
+      - Derives insights from the stored predictions and classifies them as `critical`, `warning`, `success`, or `info`.
+      - Generates action-oriented recommendations (e.g., “Book an appointment within 1–2 weeks”).
+    - **Future Risk Forecasting**:
+      - Computes risk trends per disease and classifies them as `increasing`, `decreasing`, or `stable`.
+      - Shows deltas and alerts so patients understand changing risk.
+    - **Health Trend Analytics**:
+      - Uses Chart.js (`react-chartjs-2`) to plot risk percentage over time per disease.
+    - **Appointments Tab**: Full list of past and upcoming appointments with actions to join video calls or view prescriptions.
+    - **Doctors Tab**: Displays available doctors (from backend data) with specialization, rating, and action to book a video consult.
+  - Includes a **Privacy Lens** toggle that masks sensitive numerical values visually while still allowing accurate briefs to be copied.
+  - Uses `AppointmentFormModal` and `VideoCallRoom` components for booking and live calls.
+
+Doctor Experience
+- `pages/dashboards/DoctorDashboard.js` (not fully listed above but present in project):
+  - Provides doctors a dashboard of their appointments, patients, and tools to issue prescriptions and manage availability.
+  - Integrates with appointment and prescription backend routes.
+
+Disease Prediction Forms
+- `components/DiabetesForm.js`, `HeartForm.js`, `LiverForm.js`, `KidneyForm.js`, `BoneForm.js`:
+  - Each renders a disease-specific form with the required clinical inputs.
+  - On submit, POSTs to:
+    - `/api/predict/diabetes`
+    - `/api/predict/heart`
+    - `/api/predict/liver`
+    - `/api/predict/kidney`
+    - `/api/predict/bone-fracture` (file upload for X-ray image)
+  - Displays risk level, probability, and any recommended hospitals returned by the backend.
+  - For bone fractures, allows uploading an X-ray and shows the AI classification result.
+
+Educational Disease Info Pages
+- `pages/DiabetesInfo.js`, `HeartInfo.js`, `LiverInfo.js`, `KidneyInfo.js`, `BoneInfo.js`:
+  - Explain each condition, risk factors, prevention tips, and when to see a doctor.
+  - Accessible from the “info” routes (e.g. `/diabetes-info`), with a focused UI that emphasizes a “Go to Models” button for running an assessment.
+
+AI & Assistance Features (Frontend)
+- `components/Chatbot.js`:
+  - Persistent chat widget anchored on all pages.
+  - Sends user messages to `POST /api/groq-chat`.
+  - Displays the AI assistant’s response in a chat-style UI.
+- `components/SymptomChecker.js`:
+  - Detailed form where users enter free-text symptoms, duration, and severity.
+  - Calls `POST /api/symptom-checker`.
+  - Shows top predicted conditions, confidence, and risk categories as returned by the backend AI.
+- `pages/Assistant.js`:
+  - Full-screen assistant page combining chatbot/symptom tools in a more immersive layout.
+
+Medical Report Analyzer
+- `pages/ReportAnalyzer.js`:
+  - Lets users upload lab reports (PDFs or images).
+  - Calls `POST /api/analyze-report`.
+  - Displays extracted parameters (e.g., glucose, hemoglobin, cholesterol, creatinine, blood pressure, BMI, WBC, RBC), their values, and whether they are low/normal/high.
+  - Shows per-parameter explanations and recommendations returned by the backend.
+
+Hospital & Doctor Discovery
+- `pages/HospitalFinder.js` and `components/HospitalFinder.js`:
+  - Frontend UI for map/table-like display of nearby hospitals.
+  - Uses browser geolocation to get coordinates and calls:
+    - `GET /api/hospitals/nearby` for general hospitals.
+    - Disease-specific endpoints (e.g., diabetes/heart/liver/kidney) that embed nearby specialty hospitals within prediction responses.
+  - Renders distance, address, type (government/private), rating, specialties, and a link to navigation (Google Maps).
+- `components/MeetDoctor.js`:
+  - Dedicated list view of doctors with availability and specialization, using `GET /api/doctors` or `GET /api/data/registered-doctors`.
+  - Allows patients to pick a doctor and initiate an appointment booking.
+
+Video Consultation
+- `pages/VideoConsultation.js` & `components/VideoCallRoom.js`:
+  - Provide UI for live video calls between doctor and patient.
+  - Video room IDs are obtained from backend endpoint `POST /api/start-video-call`.
+  - Integrate with appointment state so that joining and ending calls updates appointment statuses.
+
+Other UX Pages
+- `pages/HomeAnimated.js` and `pages/Home.js`: Animated landing page describing the solution, benefits, and CTA buttons (Start Assessment, Explore Models, etc.).
+- `pages/ModelsAnimated.js` and `pages/Models.js`: Landing for all predictive models; navigates to each form.
+- `pages/Services.js`, `pages/About.js`, `pages/Contact.js`, `pages/ContactAnimated.js`: Marketing / informational pages describing services, team, contact options.
+- `pages/EmergencyMode.js`:
+  - Provides quick access to emergency instructions.
+  - Includes shortcuts to hospital finder and emergency contact information.
+- `pages/Settings.js`:
+  - Patient settings page for account/profile preferences, notification preferences, etc.
+
+Styling & Animations
+- `styles/animations.css`:
+  - Houses custom CSS keyframes and transitions used across hero sections, cards, and dashboard components for smooth animations.
+
+FRONTEND LIBRARIES AND WHAT THEY ARE USED FOR
+---------------------------------------------
+Core React & Routing
+- `react`, `react-dom`: Core UI library and DOM renderer.
+- `react-router-dom`: Client-side routing (SPA URLs, `Routes`, `Route`, `Navigate`, `useLocation`, `useNavigate` etc.).
+
+UI & Layout
+- `@mui/material`: Material-UI component library for the dashboards and modals (e.g., `Box`, `Container`, `Card`, `Button`, `Tabs`, `Dialog`, `Alert`, `LinearProgress`).
+- `@mui/icons-material`: Icon set used for generic MUI icons where required.
+- `@emotion/react`, `@emotion/styled`: Styling engine for MUI; used for `styled` components like `StyledCard`, `GlassCard`, and `StatusChip`.
+- `bootstrap`, `react-bootstrap`: Bootstrap-based layout and components (mostly for older/shared parts of the UI and grid/layout).
+
+Icons & Visuals
+- `lucide-react`: Modern outline icons used heavily inside dashboards (health, calendar, brain, route, siren, etc.).
+- `react-icons`: Additional icon sets where lucide/MUI icons are insufficient.
+
+Charts & Analytics
+- `chart.js`: Charting engine.
+- `react-chartjs-2`: React bindings for Chart.js, used in `PatientDashboard` for health trend charts.
+
+Animations
+- `framer-motion`: High-level animation primitives for React pages and components (page transitions, animated cards, etc.).
+- `react-spring`: Physics-based animations used in some legacy/secondary animated sections.
+- `aos`: Scroll-triggered animations library for simple “animate on scroll” effects on marketing pages.
+
+Documents & Reports
+- `jspdf`: Used to generate downloadable PDF reports of predictions and analyses on the frontend when desired.
+
+Tooling & Build
+- `react-scripts`: CRA build and dev tooling (start, build, test, webpack/babel under the hood).
+- `web-vitals`: Used to measure and optionally report key web performance metrics.
+- `tailwindcss`, `postcss`, `autoprefixer` (devDependencies): Available for utility CSS and post-processing; can be used to complement or gradually migrate styles.
+
+BACKEND MODULES (FLASK & PYTHON)
+--------------------------------
+Core Server & Config
+- `Flask`: Web framework providing routing, request handling, and JSON responses.
+- `flask_cors.CORS`: Enables CORS for the frontend (http://localhost:3000/3001) with credentials (cookies) support.
+- `flask_session.Session`: Stores session data (user login) on the filesystem.
+- `dotenv.load_dotenv`: Loads `.env` file to get `GROQ_API_KEY` and other secrets.
+- `config.init_db`: Local module that initializes the SQLAlchemy database and attaches it to the Flask app.
+- `models.User`, `DoctorAvailability`, `Prediction`, `db`: Local SQLAlchemy models for users, doctor availability calendars, saved predictions, and the database session itself.
+- Blueprints: `auth_bp`, `data_bp`, `appointment_bp`, `settings_bp`, `analytics_bp`:
+  - `auth_bp`: Authentication (login, register, profile, me, logout).
+  - `data_bp`: Data utilities like predictions history, registered doctors, etc.
+  - `appointment_bp`: CRUD operations for appointments and prescriptions.
+  - `settings_bp`: User settings endpoints.
+  - `analytics_bp`: Advanced health analytics (`/api/analytics/health-trends`, `/api/analytics/risk-forecast`, `/api/analytics/ai-copilot-insights`) consumed by the patient dashboard.
+
+ML & Data Science
+- `numpy`, `pandas`: Numeric and data-frame operations; used for preprocessing inputs and timestamps and for report generation metadata.
+- `joblib`: Loads pre-trained scikit-learn models and scalers from `.pkl` files (diabetes, heart, liver, kidney).
+- `sklearn.preprocessing`, `LabelEncoder`, `DecisionTreeClassifier`, etc.: Used in the initial model training and some legacy logic, but in this app mainly for ensuring compatibility with serialized models.
+- Loaded models (from backend folder):
+  - `diabetes.pkl` + `d_scaler.pkl`: Diabetes Random Forest + scaler (4 features).
+  - `liver_model.pkl`: Liver disease classifier.
+  - `kidney_model.pkl` + `k_scaler.pkl`: Kidney disease classifier + scaler (24 features).
+  - `cardio_random_forest.pkl`: Heart disease Random Forest (11 features).
+
+Bone Fracture & Image Models
+- `PIL.Image`: Loads and preprocesses X-ray images.
+- `transformers.pipeline`: Hugging Face Transformers pipeline is configured for `image-classification` using model `Hemgg/bone-fracture-detection-using-xray`.
+  - Used in `/api/predict/bone-fracture` to classify X-rays as “Fracture” or “No Fracture” with confidence, severity, urgency, and a detailed report payload.
+
+Medical Report Analysis (PDF/Image OCR)
+- `PyPDF2`: Extracts text from multi-page PDF lab reports.
+- `easyocr`: OCR engine used to extract text from image-based medical reports.
+- `MEDICAL_PARAMETERS` dictionary:
+  - Defines regex patterns, normal ranges, and labels for parameters like glucose, hemoglobin, cholesterol, creatinine, blood pressure, BMI, WBC, RBC.
+- Helper functions:
+  - `extract_text_from_pdf(file_bytes)`: Walks through PDF pages and concatenates text.
+  - `extract_text_from_image(file_bytes)`: Runs EasyOCR on an image array to get text.
+  - `analyze_parameters(text)`: Uses regex to find each parameter, compare with normal ranges, classify as low/normal/high, and build explanations.
+  - `get_health_recommendations(param_key, status, value)`: Generates structured recommendations (medications, diet, lifestyle, follow-up) specific to each abnormal parameter.
+- Exposed endpoint:
+  - `POST /api/analyze-report`: Accepts PDF or image, extracts text, analyzes parameters, and returns structured findings plus disclaimer.
+
+Hospital & Doctor Discovery (Backend)
+- `requests`: Used to call the Overpass API and Groq API.
+- Distance & geo helpers:
+  - `calculate_distance(lat1, lon1, lat2, lon2)`: Haversine distance for sorting hospitals/doctors by proximity.
+- Overpass-based endpoints:
+  - `GET /api/hospitals/nearby`:
+    - Queries Overpass API for hospitals in a radius around the user.
+    - Builds a normalized list with name, distance, coordinates, address, type, phone, specialties, and a generic rating.
+    - Falls back to mock hospitals if API fails or times out.
+  - `get_nearby_specialty_hospitals(...)` and `get_nearby_diabetes_hospitals(...)`:
+    - Query Overpass for hospitals and then:
+      - Call Groq (`analyze_hospital_with_groq`) to infer specialties and rating from limited public info.
+      - Filter for disease-specific specialties (cardiology, nephrology, diabetology, etc.).
+      - Return top matches to be embedded in prediction responses.
+- `GET /api/doctors`:
+  - Uses Overpass data (`amenity=doctors` and `amenity=clinic`) plus generated mock doctors.
+  - Filters by specialization, rating, availability.
+  - Returns location, distance, rating, availability, contact details for up to 20 doctors.
+
+AI & Groq Integration
+- `groq` Python client (optional dependency):
+  - `POST /api/groq-chat`:
+    - If Groq is available and configured, calls LLM model `llama-3.1-8b-instant`.
+    - Has two modes:
+      - General healthcare information (returns markdown-style structured text).
+      - Nutrition / meal plan mode: returns strict JSON with 7-day Indian meal plan and tips.
+    - If Groq is unavailable, returns a safe fallback message.
+  - `POST /api/symptom-checker`:
+    - Crafts a strict JSON-only prompt listing likely diseases and confidences.
+    - Parses the JSON and returns:
+      - `top_prediction` (disease, confidence, risk category, explanation).
+      - `other_conditions` (next two diseases).
+  - `analyze_hospital_with_groq`:
+    - Given a hospital (name, address, type, website), asks Groq to produce JSON with specialties, rating, and reasoning.
+    - Used to enrich raw map data with medically relevant metadata.
+
+Appointments, Video Calls & Analytics
+- `appointment_routes` (via `appointment_bp`):
+  - Stores appointments in the database (patient, doctor, date, time, symptoms, emergency flag, status).
+  - Supports prescription creation and retrieval (`GET /api/appointments/<id>/prescription`), used in the patient dashboard.
+- `start_video_call` endpoint (`POST /api/start-video-call`):
+  - Validates doctor availability and video capability from `doctors_data.json`.
+  - Generates a unique `room_id` for each call.
+  - Returns doctor name, specialization, and room info to the frontend’s `VideoCallRoom`.
+- `analytics_bp` endpoints:
+  - `GET /api/analytics/health-trends`: Aggregates predictions per disease and time to power trend charts.
+  - `GET /api/analytics/risk-forecast`: Produces forward-looking risk forecast summaries.
+  - `GET /api/analytics/ai-copilot-insights`: Returns AI-aligned insights for the “AI Health Copilot” cards.
+
+Authentication & Security
+- `auth_bp`:
+  - Handles login, registration, “me” endpoint, logout and session management.
+  - Relies on `flask_session` and cookies (`SESSION_COOKIE_SAMESITE=Lax`, `HTTPONLY=True`).
+- `settings_bp`:
+  - Manages user settings such as notification preferences and potentially privacy options.
+- Data model `Prediction`:
+  - Saves each ML prediction with:
+    - `user_id`, `disease_type`, `prediction_result`, `probability`, `risk_level`, `input_data` JSON.
+  - Used to drive historical analytics and AI Copilot summaries.
+
+HEALTH & STATUS ENDPOINTS
+-------------------------
+- `GET /api/test`: Simple health check indicating whether backend is running and which models are loaded.
+- `GET /api/health`: Returns:
+  - Overall status.
+  - Per-model `models_loaded` booleans.
+  - Detailed error messages for any model that failed to load.
+
+INTENDED TALKING POINTS FOR EXTERNAL EXPLANATION
+-----------------------------------------------
+When you explain this project to an external audience, you can structure it like this:
+
+1. **Problem Statement**
+   - Early detection and management of chronic diseases is difficult due to limited access to specialists, fragmented data, and low patient awareness.
+   - Patients often do not know whether their lab reports or symptoms are serious enough to seek urgent care.
+
+2. **Solution Overview**
+   - A web-based AI assistant that:
+     - Screens for key diseases using validated ML models.
+     - Interprets lab reports and flags abnormal parameters with clear explanations.
+     - Connects patients to nearby hospitals and specialists based on their condition and location.
+     - Offers AI-based symptom triage and education, with strict disclaimers to avoid acting as a doctor.
+     - Supports video consultations, prescriptions, and ongoing monitoring through a patient dashboard.
+
+3. **Key Features**
+   - Multi-disease prediction (diabetes, heart, liver, kidney, bone fracture).
+   - Hospital finder integrated with OpenStreetMap / Overpass and enriched by AI.
+   - AI chatbot, symptom checker, and AI Health Copilot for trend/risk insights.
+   - Medical report analyzer (PDF & image OCR) with parameter-level recommendations.
+   - Doctor discovery and video consultations.
+   - Role-based dashboards for patients and doctors, with a strong emphasis on UX and privacy.
+
+4. **Architecture**
+   - React SPA frontend with MUI/Bootstrap, charts, animations, and role-based routing.
+   - Flask backend with modular blueprints, ML inference, Groq LLM integration, OCR pipelines, and geospatial APIs.
+   - Database via SQLAlchemy to store users, predictions, appointments, and analytics inputs.
+
+5. **Safety & Disclaimers**
+   - All AI outputs are clearly labeled as **AI-assisted screening** and **not a medical diagnosis**.
+   - Encourages consultation with qualified healthcare professionals at every critical decision point.
+   - Focuses on education, triage support, and navigation—not replacing doctors.
+
+This text file is designed so you can copy-paste sections directly into PPTs, documents, or verbal explanations when presenting the project externally.
+
