@@ -7,6 +7,7 @@ A comprehensive web application for disease risk prediction using machine learni
 ### Disease Prediction Models
 - **Diabetes Prediction**: Uses 4 key parameters (Glucose, BMI, Blood Pressure, Age)
 - **Heart Disease Prediction**: Comprehensive cardiovascular risk assessment
+- **Cardiovascular Multimodal Analysis**: Advanced multimodal prediction using medical imaging (google/medsiglip-224) + 13 clinical parameters
 - **Liver Disease Prediction**: Liver function analysis with multiple biomarkers
 - **Kidney Disease Prediction**: Chronic kidney disease risk evaluation
 - **Bone Fracture Detection**: AI-powered X-ray analysis for fracture detection

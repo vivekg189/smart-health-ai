@@ -1,5 +1,7 @@
 from datetime import datetime
 from config import db
+from sqlalchemy.dialects.postgresql import UUID
+import uuid
 
 class User(db.Model):
     __tablename__ = 'users'
@@ -17,19 +19,11 @@ class User(db.Model):
     specialization = db.Column(db.String(100))
     last_login = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    predictions = db.relationship('Prediction', backref='user', lazy=True, cascade='all, delete-orphan')
-    consultations_as_patient = db.relationship('Consultation', foreign_keys='Consultation.patient_id', backref='patient', lazy=True)
-    consultations_as_doctor = db.relationship('Consultation', foreign_keys='Consultation.doctor_id', backref='doctor', lazy=True)
-    availability = db.relationship('DoctorAvailability', backref='doctor', uselist=False, cascade='all, delete-orphan')
-    health_data = db.relationship('HealthData', backref='user', uselist=False, cascade='all, delete-orphan')
-    notification_settings = db.relationship('NotificationSettings', backref='user', uselist=False, cascade='all, delete-orphan')
-    privacy_settings = db.relationship('PrivacySettings', backref='user', uselist=False, cascade='all, delete-orphan')
 
 class Prediction(db.Model):
     __tablename__ = 'predictions'
     
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
     disease_type = db.Column(db.String(50), nullable=False)
     prediction_result = db.Column(db.String(50), nullable=False)
@@ -147,3 +141,27 @@ class PrivacySettings(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, unique=True, index=True)
     data_sharing_consent = db.Column(db.Boolean, default=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class PatientRecord(db.Model):
+    __tablename__ = 'patient_records'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    patient_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    doctor_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    record_type = db.Column(db.String(50), default='general')
+    diagnosis = db.Column(db.Text)
+    notes = db.Column(db.Text)
+    attachments = db.Column(db.JSON)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+class TreatmentHistory(db.Model):
+    __tablename__ = 'treatment_history'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    patient_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    doctor_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    treatment_type = db.Column(db.String(100))
+    description = db.Column(db.Text)
+    medications = db.Column(db.JSON)
+    outcome = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)

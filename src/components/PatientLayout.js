@@ -15,7 +15,8 @@ import {
   Settings,
   LogOut,
   Bell,
-  Stethoscope
+  Stethoscope,
+  ClipboardCheck
 } from 'lucide-react';
 
 const PatientLayout = () => {

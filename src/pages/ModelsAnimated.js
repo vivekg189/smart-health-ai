@@ -1,7 +1,8 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Row, Col, Card, Button } from 'react-bootstrap';
+import { Row, Col, Card, Button, Container } from 'react-bootstrap';
 import { Activity, HeartPulse, Brain, Stethoscope, Scan, Bone } from 'lucide-react';
+import BackButton from '../components/BackButton';
 import '../styles/animations.css';
 
 const ModelsAnimated = () => {
@@ -32,11 +33,11 @@ const ModelsAnimated = () => {
       id: 'heart',
       title: 'Cardiovascular Health Analysis',
       description:
-        'Comprehensive heart disease risk prediction using blood pressure, lipids, and cardiac biomarkers.',
+        'Multimodal heart disease prediction using medical imaging and clinical data with google/medsiglip-224.',
       icon: <HeartPulse size={30} strokeWidth={2.2} />,
       color: '#D9234B',
-      features: ['ECG-style Metrics', 'Blood Pressure', 'Cholesterol Levels', 'Cardiac Enzymes'],
-      path: '/heart'
+      features: ['Image Analysis', 'Clinical Data', 'Multimodal AI', 'Risk Assessment'],
+      path: '/cardiovascular-multimodal'
     },
     {
       id: 'liver',
@@ -79,6 +80,9 @@ const ModelsAnimated = () => {
       margin: '0',
       background: 'linear-gradient(135deg, #E6F7F5 0%, #DCEAF2 100%)'
     }}>
+      <Container>
+        <BackButton />
+      </Container>
       {/* Header Section */}
       <section className="py-4 mb-3">
         <Row className="text-center">

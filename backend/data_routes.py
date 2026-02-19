@@ -19,7 +19,6 @@ def require_auth(f):
 @require_auth
 def save_prediction():
     try:
-        # Check if database is available
         if not db.engine:
             return jsonify({'message': 'Prediction not saved - database not configured'}), 200
         
@@ -50,7 +49,14 @@ def save_prediction():
 def get_predictions():
     try:
         user_id = session.get('user_id')
-        predictions = Prediction.query.filter_by(user_id=user_id).order_by(Prediction.created_at.desc()).all()
+        predictions = db.session.query(
+            Prediction.id,
+            Prediction.disease_type,
+            Prediction.prediction_result,
+            Prediction.probability,
+            Prediction.risk_level,
+            Prediction.created_at
+        ).filter_by(user_id=user_id).order_by(Prediction.created_at.desc()).all()
         
         return jsonify({
             'predictions': [{

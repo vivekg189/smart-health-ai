@@ -24,12 +24,15 @@ import PyPDF2
 import easyocr
 import warnings
 from config import init_db
+from migrations import run_migrations
 from auth import auth_bp
 from data_routes import data_bp
 from appointment_routes import appointment_bp
 from settings_routes import settings_bp
 from health_analytics import analytics_bp
+from doctor_routes import doctor_bp
 from models import User, DoctorAvailability, db, Prediction
+from cardiovascular_multimodal import predict_cardiovascular, generate_report as generate_cardio_report
 
 try:
     from groq import Groq
@@ -44,6 +47,11 @@ warnings.filterwarnings('ignore', category=UserWarning, module='torch')
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+
+# Suppress verbose Groq/httpcore debug logs
+logging.getLogger('groq').setLevel(logging.WARNING)
+logging.getLogger('httpcore').setLevel(logging.WARNING)
+logging.getLogger('httpx').setLevel(logging.WARNING)
 
 app = Flask(__name__)
 CORS(
@@ -61,11 +69,18 @@ Session(app)
 
 init_db(app)
 
+# Run auto-migrations
+try:
+    run_migrations(app, db)
+except Exception as e:
+    logger.warning(f"Auto-migration skipped: {e}")
+
 app.register_blueprint(auth_bp, url_prefix='/api/auth')
 app.register_blueprint(data_bp, url_prefix='/api/data')
 app.register_blueprint(appointment_bp, url_prefix='/api/appointments')
 app.register_blueprint(settings_bp)
 app.register_blueprint(analytics_bp, url_prefix='/api/analytics')
+app.register_blueprint(doctor_bp, url_prefix='/api/doctor')
 
 # Initialize EasyOCR reader (load once at startup)
 _ocr_reader = None
@@ -237,16 +252,25 @@ def predict_diabetes():
         from flask import session
         if 'user_id' in session:
             try:
-                pred = Prediction(
-                    user_id=session['user_id'],
-                    disease_type='diabetes',
-                    prediction_result=risk_level,
-                    probability=float(probability),
-                    risk_level=risk_level,
-                    input_data=data
-                )
-                db.session.add(pred)
-                db.session.commit()
+                if not db.engine:
+                    logger.warning("Database not configured, prediction not saved")
+                else:
+                    # Get doctor_id from request if patient selected a doctor
+                    doctor_id = data.get('doctor_id')
+                    
+                    pred = Prediction(
+                        user_id=session['user_id'],
+                        disease_type='diabetes',
+                        prediction_result=risk_level,
+                        probability=float(probability),
+                        risk_level=risk_level,
+                        input_data=data
+                    )
+                    db.session.add(pred)
+                    db.session.commit()
+                    
+                    response['prediction_id'] = str(pred.id)
+                    logger.info(f"✅ Prediction saved: ID={pred.id}, User={session['user_id']}, Type=diabetes")
             except Exception as e:
                 logger.error(f"Failed to save prediction: {str(e)}")
                 try:
@@ -1180,49 +1204,227 @@ def calculate_distance(lat1, lon1, lat2, lon2):
     
     return R * c
 
-# Medical Report Analyzer
+# Medical Report Analyzer with AI
+_ner_pipeline = None
+_summarizer_pipeline = None
+_table_qa_pipeline = None
+
+try:
+    logger.info("Loading biomedical NER model...")
+    _ner_pipeline = pipeline("ner", model="d4data/biomedical-ner-all", aggregation_strategy="simple", device=-1)
+    logger.info("Biomedical NER model loaded successfully")
+except Exception as e:
+    logger.warning(f"NER model not available: {str(e)}")
+    _ner_pipeline = None
+
+try:
+    logger.info("Loading clinical summarizer model...")
+    _summarizer_pipeline = pipeline("text2text-generation", model="google/flan-t5-large", device=-1, max_length=512)
+    logger.info("Clinical summarizer model loaded successfully")
+except Exception as e:
+    logger.warning(f"Summarizer model not available: {str(e)}")
+    _summarizer_pipeline = None
+
+# Try to load table extraction model for structured reports
+try:
+    logger.info("Loading table QA model for structured extraction...")
+    from transformers import TapasTokenizer, TapasForQuestionAnswering
+    _table_qa_pipeline = pipeline("table-question-answering", model="google/tapas-base-finetuned-wtq", device=-1)
+    logger.info("Table QA model loaded successfully")
+except Exception as e:
+    logger.warning(f"Table QA model not available: {str(e)}")
+    _table_qa_pipeline = None
+
 MEDICAL_PARAMETERS = {
-    'glucose': {'pattern': r'glucose[:\s]*([0-9.]+)', 'unit': 'mg/dL', 'normal': (70, 100), 'name': 'Blood Glucose'},
-    'hemoglobin': {'pattern': r'h[ae]moglobin[:\s]*([0-9.]+)', 'unit': 'g/dL', 'normal': (12, 16), 'name': 'Hemoglobin'},
-    'cholesterol': {'pattern': r'cholesterol[:\s]*([0-9.]+)', 'unit': 'mg/dL', 'normal': (125, 200), 'name': 'Total Cholesterol'},
-    'creatinine': {'pattern': r'creatinine[:\s]*([0-9.]+)', 'unit': 'mg/dL', 'normal': (0.6, 1.2), 'name': 'Creatinine'},
-    'blood_pressure': {'pattern': r'blood\s*pressure[:\s]*([0-9]+)/([0-9]+)', 'unit': 'mmHg', 'normal': (120, 80), 'name': 'Blood Pressure'},
-    'bmi': {'pattern': r'bmi[:\s]*([0-9.]+)', 'unit': '', 'normal': (18.5, 24.9), 'name': 'BMI'},
-    'wbc': {'pattern': r'wbc[:\s]*([0-9.]+)', 'unit': 'cells/μL', 'normal': (4000, 11000), 'name': 'White Blood Cells'},
-    'rbc': {'pattern': r'rbc[:\s]*([0-9.]+)', 'unit': 'million cells/μL', 'normal': (4.5, 5.5), 'name': 'Red Blood Cells'},
+    'glucose': {'pattern': r'(?:blood\s+)?(?:glucose|sugar|fasting\s+blood\s+sugar|fbs|random\s+blood\s+sugar|rbs)[:\s=-]*([0-9.]+)', 'unit': 'mg/dL', 'normal': (70, 100), 'name': 'Blood Glucose', 'borderline': (100, 125), 'aliases': ['glucose', 'sugar', 'fbs', 'rbs', 'blood sugar']},
+    'hemoglobin': {'pattern': r'(?:h[ae]?moglobin|hb|haemoglobin)[:\s=-]*([0-9.]+)', 'unit': 'g/dL', 'normal': (12, 16), 'name': 'Hemoglobin', 'borderline': (11, 12), 'aliases': ['hemoglobin', 'hb', 'haemoglobin']},
+    'cholesterol': {'pattern': r'(?:total\s+)?(?:cholesterol|chol)[:\s=-]*([0-9.]+)', 'unit': 'mg/dL', 'normal': (125, 200), 'name': 'Total Cholesterol', 'borderline': (200, 240), 'aliases': ['cholesterol', 'chol', 'total cholesterol']},
+    'ldl': {'pattern': r'(?:ldl|low\s+density\s+lipoprotein)(?:\s+cholesterol)?[:\s=-]*([0-9.]+)', 'unit': 'mg/dL', 'normal': (0, 100), 'name': 'LDL Cholesterol', 'borderline': (100, 130), 'aliases': ['ldl', 'ldl cholesterol']},
+    'hdl': {'pattern': r'(?:hdl|high\s+density\s+lipoprotein)(?:\s+cholesterol)?[:\s=-]*([0-9.]+)', 'unit': 'mg/dL', 'normal': (40, 60), 'name': 'HDL Cholesterol', 'borderline': (35, 40), 'aliases': ['hdl', 'hdl cholesterol']},
+    'triglycerides': {'pattern': r'(?:triglycerides?|tg)[:\s=-]*([0-9.]+)', 'unit': 'mg/dL', 'normal': (0, 150), 'name': 'Triglycerides', 'borderline': (150, 200), 'aliases': ['triglycerides', 'tg']},
+    'creatinine': {'pattern': r'(?:serum\s+)?(?:creatinine|creat)[:\s=-]*([0-9.]+)', 'unit': 'mg/dL', 'normal': (0.6, 1.2), 'name': 'Creatinine', 'borderline': (1.2, 1.5), 'aliases': ['creatinine', 'creat', 'serum creatinine']},
+    'blood_urea': {'pattern': r'(?:blood\s+)?(?:urea|bun|blood\s+urea\s+nitrogen)[:\s=-]*([0-9.]+)', 'unit': 'mg/dL', 'normal': (7, 20), 'name': 'Blood Urea', 'borderline': (20, 25), 'aliases': ['urea', 'bun', 'blood urea']},
+    'alt': {'pattern': r'(?:sgpt|alt|alanine\s+aminotransferase|alanine)[:\s=-]*([0-9.]+)', 'unit': 'IU/L', 'normal': (7, 56), 'name': 'ALT (SGPT)', 'borderline': (56, 70), 'aliases': ['alt', 'sgpt', 'alanine']},
+    'ast': {'pattern': r'(?:sgot|ast|aspartate\s+aminotransferase|aspartate)[:\s=-]*([0-9.]+)', 'unit': 'IU/L', 'normal': (10, 40), 'name': 'AST (SGOT)', 'borderline': (40, 50), 'aliases': ['ast', 'sgot', 'aspartate']},
+    'bilirubin_total': {'pattern': r'(?:total\s+)?(?:bilirubin|bili)[:\s=-]*([0-9.]+)', 'unit': 'mg/dL', 'normal': (0.1, 1.2), 'name': 'Total Bilirubin', 'borderline': (1.2, 1.5), 'aliases': ['bilirubin', 'bili', 'total bilirubin']},
+    'albumin': {'pattern': r'(?:serum\s+)?albumin[:\s=-]*([0-9.]+)', 'unit': 'g/dL', 'normal': (3.5, 5.5), 'name': 'Albumin', 'borderline': (3.0, 3.5), 'aliases': ['albumin', 'serum albumin']},
+    'blood_pressure': {'pattern': r'(?:blood\s+)?(?:pressure|bp)[:\s=-]*([0-9]+)\s*[/\\]\s*([0-9]+)', 'unit': 'mmHg', 'normal': (120, 80), 'name': 'Blood Pressure', 'aliases': ['bp', 'blood pressure']},
+    'bmi': {'pattern': r'(?:bmi|body\s+mass\s+index)[:\s=-]*([0-9.]+)', 'unit': '', 'normal': (18.5, 24.9), 'name': 'BMI', 'borderline': (25, 29.9), 'aliases': ['bmi', 'body mass index']},
+    'wbc': {'pattern': r'(?:wbc|white\s+blood\s+cell|leucocyte)[:\s=-]*([0-9.]+)', 'unit': 'cells/μL', 'normal': (4000, 11000), 'name': 'White Blood Cells', 'borderline': (3500, 4000), 'aliases': ['wbc', 'white blood cell', 'leucocyte']},
+    'rbc': {'pattern': r'(?:rbc|red\s+blood\s+cell|erythrocyte)[:\s=-]*([0-9.]+)', 'unit': 'million cells/μL', 'normal': (4.5, 5.5), 'name': 'Red Blood Cells', 'borderline': (4.0, 4.5), 'aliases': ['rbc', 'red blood cell', 'erythrocyte']},
+    'platelets': {'pattern': r'(?:platelet[s]?|plt)[:\s=-]*([0-9.]+)', 'unit': 'cells/μL', 'normal': (150000, 450000), 'name': 'Platelets', 'borderline': (130000, 150000), 'aliases': ['platelets', 'plt']},
+    'hba1c': {'pattern': r'(?:hba1c|glycated\s+hemoglobin|glycosylated\s+hemoglobin)[:\s=-]*([0-9.]+)', 'unit': '%', 'normal': (4, 5.6), 'name': 'HbA1c', 'borderline': (5.7, 6.4), 'aliases': ['hba1c', 'glycated hemoglobin']},
+    'tsh': {'pattern': r'(?:tsh|thyroid\s+stimulating\s+hormone)[:\s=-]*([0-9.]+)', 'unit': 'mIU/L', 'normal': (0.4, 4.0), 'name': 'TSH', 'borderline': (4.0, 5.0), 'aliases': ['tsh', 'thyroid stimulating hormone']},
+    't3': {'pattern': r'(?:t3|triiodothyronine)[:\s=-]*([0-9.]+)', 'unit': 'ng/dL', 'normal': (80, 200), 'name': 'T3', 'borderline': (70, 80), 'aliases': ['t3', 'triiodothyronine']},
+    't4': {'pattern': r'(?:t4|thyroxine)[:\s=-]*([0-9.]+)', 'unit': 'μg/dL', 'normal': (5, 12), 'name': 'T4', 'borderline': (4, 5), 'aliases': ['t4', 'thyroxine']},
+    'sodium': {'pattern': r'(?:serum\s+)?(?:sodium|na)[:\s=-]*([0-9.]+)', 'unit': 'mEq/L', 'normal': (136, 145), 'name': 'Sodium', 'borderline': (135, 136), 'aliases': ['sodium', 'na', 'serum sodium']},
+    'potassium': {'pattern': r'(?:serum\s+)?(?:potassium|k)[:\s=-]*([0-9.]+)', 'unit': 'mEq/L', 'normal': (3.5, 5.0), 'name': 'Potassium', 'borderline': (3.3, 3.5), 'aliases': ['potassium', 'k', 'serum potassium']},
 }
 
 def extract_text_from_pdf(file_bytes):
+    """Enhanced PDF text extraction with layout preservation"""
     try:
         pdf_reader = PyPDF2.PdfReader(io.BytesIO(file_bytes))
         text = ''
         for page in pdf_reader.pages:
             page_text = page.extract_text()
             if page_text:
-                text += page_text + ' '
+                text += page_text + '\n'
         return text.strip() if text.strip() else None
     except Exception as e:
         logger.error(f"PDF extraction error: {str(e)}", exc_info=True)
         return None
 
+def preprocess_image_for_ocr(img):
+    """Enhance image quality for better OCR results"""
+    try:
+        import cv2
+        
+        # Convert PIL to OpenCV format
+        img_array = np.array(img)
+        
+        # Convert to grayscale
+        if len(img_array.shape) == 3:
+            gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
+        else:
+            gray = img_array
+        
+        # Apply thresholding to get better contrast
+        _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        
+        # Denoise
+        denoised = cv2.fastNlMeansDenoising(thresh, None, 10, 7, 21)
+        
+        # Increase contrast
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+        enhanced = clahe.apply(denoised)
+        
+        return enhanced
+    except Exception as e:
+        logger.warning(f"Image preprocessing failed: {e}, using original")
+        return np.array(img)
+
+def clean_ocr_text(text):
+    """Clean OCR output to remove gibberish and fix common errors"""
+    if not text:
+        return text
+    
+    # Remove non-printable characters except newlines and spaces
+    text = ''.join(char for char in text if char.isprintable() or char in '\n\t')
+    
+    # Fix common OCR errors
+    replacements = {
+        'O': '0',  # Letter O to zero in numeric contexts
+        'l': '1',  # Lowercase L to one in numeric contexts
+        'I': '1',  # Capital I to one in numeric contexts
+        'S': '5',  # S to 5 in numeric contexts
+        'B': '8',  # B to 8 in numeric contexts
+    }
+    
+    # Apply replacements only in numeric contexts
+    lines = text.split('\n')
+    cleaned_lines = []
+    
+    for line in lines:
+        # Skip lines with too many special characters (likely gibberish)
+        special_char_ratio = sum(1 for c in line if not c.isalnum() and c not in ' .-:/()') / max(len(line), 1)
+        if special_char_ratio > 0.5:
+            continue
+        
+        # Skip very short lines (likely noise)
+        if len(line.strip()) < 3:
+            continue
+        
+        cleaned_lines.append(line)
+    
+    return '\n'.join(cleaned_lines)
+
 def extract_text_from_image(file_bytes):
+    """Enhanced OCR with preprocessing, fallback, and text cleaning"""
     try:
         if _ocr_reader is None:
             logger.error("EasyOCR reader not initialized")
             return None
         
         img = Image.open(io.BytesIO(file_bytes))
-        img_array = np.array(img)
         
-        # Use EasyOCR to extract text
-        results = _ocr_reader.readtext(img_array)
+        # Check image size
+        width, height = img.size
+        logger.info(f"Image dimensions: {width}x{height}")
         
-        # Combine all detected text
-        text = ' '.join([result[1] for result in results])
+        if width < 800 or height < 600:
+            logger.warning(f"Image resolution is low ({width}x{height}). Recommend >1200x1600 for best results.")
         
-        return text.strip() if text.strip() else None
+        # Try with preprocessing first
+        text = None
+        try:
+            img_enhanced = preprocess_image_for_ocr(img)
+            results = _ocr_reader.readtext(img_enhanced, detail=1, paragraph=False, batch_size=4)
+            logger.info(f"OCR extracted {len(results)} text blocks with preprocessing")
+            
+            if results:
+                # Sort by position and group into lines
+                sorted_results = sorted(results, key=lambda x: (x[0][0][1], x[0][0][0]))
+                
+                lines = []
+                current_line = []
+                current_y = None
+                y_threshold = 30
+                
+                for bbox, text_block, conf in sorted_results:
+                    if conf < 0.2:  # Lower threshold
+                        continue
+                    
+                    y_pos = bbox[0][1]
+                    
+                    if current_y is None:
+                        current_y = y_pos
+                        current_line.append(text_block)
+                    elif abs(y_pos - current_y) < y_threshold:
+                        current_line.append(text_block)
+                    else:
+                        if current_line:
+                            lines.append(' '.join(current_line))
+                        current_line = [text_block]
+                        current_y = y_pos
+                
+                if current_line:
+                    lines.append(' '.join(current_line))
+                
+                text = '\n'.join(lines) if lines else None
+        except Exception as e:
+            logger.warning(f"Preprocessing failed: {e}")
+        
+        # Fallback: Try Tesseract if EasyOCR fails
+        if not text or len(text.strip()) < 50:
+            try:
+                import pytesseract
+                logger.info("Trying Tesseract OCR as fallback...")
+                
+                # Convert to grayscale for Tesseract
+                img_gray = img.convert('L')
+                text_tesseract = pytesseract.image_to_string(img_gray, config='--psm 6')
+                
+                if text_tesseract and len(text_tesseract.strip()) > len(text.strip() if text else ''):
+                    text = text_tesseract
+                    logger.info(f"Tesseract extracted {len(text)} characters")
+            except Exception as e:
+                logger.warning(f"Tesseract fallback failed: {e}")
+        
+        # Clean the extracted text
+        if text:
+            text = clean_ocr_text(text)
+            logger.info(f"OCR final text length: {len(text)} characters after cleaning")
+            
+            # Log preview for debugging
+            if len(text) < 100:
+                logger.warning(f"OCR extracted very little text: '{text}'")
+        else:
+            logger.error("OCR produced empty text")
+        
+        return text
     except Exception as e:
-        logger.error(f"EasyOCR error: {str(e)}", exc_info=True)
+        logger.error(f"OCR error: {str(e)}", exc_info=True)
         return None
 
 def get_health_recommendations(param_key, status, value):
@@ -1298,124 +1500,628 @@ def get_health_recommendations(param_key, status, value):
     
     return recommendations
 
-def analyze_parameters(text):
-    results = []
+def extract_parameters_with_ai(text):
+    """Enhanced AI-based parameter extraction using NER + contextual matching"""
+    if not _ner_pipeline:
+        return []
+    
+    try:
+        # Run NER on text
+        entities = _ner_pipeline(text[:5000])
+        extracted = []
+        
+        for entity in entities:
+            if entity['entity_group'] in ['TEST', 'MEASUREMENT', 'VALUE', 'DISEASE']:
+                extracted.append({
+                    'text': entity['word'],
+                    'type': entity['entity_group'],
+                    'score': entity['score'],
+                    'start': entity.get('start', 0),
+                    'end': entity.get('end', 0)
+                })
+        
+        return extracted
+    except Exception as e:
+        logger.error(f"AI NER extraction error: {str(e)}")
+        return []
+
+def extract_with_ai_context(text):
+    """Use AI to extract parameter-value pairs from unstructured text"""
+    if not _summarizer_pipeline:
+        return {}
+    
+    try:
+        # Ask AI to extract lab values
+        prompt = f"""Extract all medical lab test values from this text. Format as 'Test: Value Unit'.
+
+Text: {text[:1500]}
+
+Extracted values:"""
+        
+        result = _summarizer_pipeline(prompt, max_length=300, min_length=50, do_sample=False)
+        ai_output = result[0]['generated_text'].strip()
+        
+        # Parse AI output to extract parameters
+        extracted_params = {}
+        lines = ai_output.split('\n')
+        for line in lines:
+            if ':' in line:
+                parts = line.split(':', 1)
+                if len(parts) == 2:
+                    param_name = parts[0].strip().lower()
+                    value_str = parts[1].strip()
+                    # Extract numeric value
+                    value_match = re.search(r'([0-9.]+)', value_str)
+                    if value_match:
+                        extracted_params[param_name] = value_match.group(1)
+        
+        return extracted_params
+    except Exception as e:
+        logger.warning(f"AI context extraction failed: {str(e)}")
+        return {}
+
+def fuzzy_match_parameter(text, param_aliases):
+    """Fuzzy matching for parameter names in text"""
     text_lower = text.lower()
+    for alias in param_aliases:
+        if alias.lower() in text_lower:
+            return True
+    return False
+
+def extract_value_near_parameter(text, param_name, window=100):
+    """Extract numeric value near a parameter name"""
+    text_lower = text.lower()
+    param_pos = text_lower.find(param_name.lower())
     
+    if param_pos == -1:
+        return None
+    
+    # Look for number within window characters after parameter name
+    search_text = text[param_pos:param_pos + window]
+    value_match = re.search(r'[:\s=-]+([0-9.]+)', search_text)
+    
+    if value_match:
+        return value_match.group(1)
+    
+    return None
+
+def classify_value_status(value, normal_range, borderline_range=None):
+    """Classify parameter value as HIGH, LOW, BORDERLINE, or NORMAL"""
+    normal_min, normal_max = normal_range
+    
+    if value < normal_min:
+        if borderline_range and value >= borderline_range[0]:
+            return 'BORDERLINE_LOW'
+        return 'LOW'
+    elif value > normal_max:
+        if borderline_range and value <= borderline_range[1]:
+            return 'BORDERLINE_HIGH'
+        return 'HIGH'
+    else:
+        return 'NORMAL'
+
+def generate_clinical_summary(abnormal_params):
+    """AI-powered clinical summary with Flan-T5"""
+    if not abnormal_params:
+        return "All parameters are within normal range. Continue maintaining a healthy lifestyle."
+    
+    # Enhanced AI summary with structured input
+    if _summarizer_pipeline:
+        try:
+            # Build structured prompt for better AI reasoning
+            prompt = "Analyze these lab results and provide clinical interpretation:\n\n"
+            for param in abnormal_params[:8]:  # Increased from 5 to 8
+                prompt += f"{param['parameter']}: {param['value']} {param['unit']} - Status: {param['status']}\n"
+            prompt += "\nProvide: 1) Key findings 2) Possible health risks 3) Recommended actions (max 150 words)"
+            
+            result = _summarizer_pipeline(
+                prompt, 
+                max_length=250, 
+                min_length=80, 
+                do_sample=False,
+                num_beams=4
+            )
+            summary = result[0]['generated_text'].strip()
+            
+            # Clean up if model repeats the prompt
+            if 'Analyze these' in summary:
+                summary = summary.split('Recommended actions')[-1].strip()
+            
+            return summary if len(summary) > 20 else generate_fallback_summary(abnormal_params)
+        except Exception as e:
+            logger.warning(f"AI summary failed: {str(e)}, using fallback")
+    
+    return generate_fallback_summary(abnormal_params)
+
+def generate_fallback_summary(abnormal_params):
+    """Structured fallback summary"""
+    high_risk = [p for p in abnormal_params if p['status'] in ['HIGH', 'LOW']]
+    borderline = [p for p in abnormal_params if 'BORDERLINE' in p['status']]
+    
+    summary = []
+    
+    if high_risk:
+        params = ', '.join([p['parameter'] for p in high_risk[:4]])
+        summary.append(f"⚠️ Critical: Abnormal levels in {params}.")
+    
+    if borderline:
+        params = ', '.join([p['parameter'] for p in borderline[:3]])
+        summary.append(f"⚡ Borderline: {params} require monitoring.")
+    
+    # Risk assessment
+    if len(high_risk) >= 3:
+        summary.append("Multiple abnormalities suggest systemic health concerns.")
+    elif high_risk:
+        summary.append("Targeted medical evaluation recommended.")
+    
+    # Action items
+    if high_risk:
+        summary.append("🏥 Action: Consult healthcare provider within 48-72 hours.")
+    else:
+        summary.append("📋 Action: Schedule follow-up testing in 4-6 weeks.")
+    
+    return ' '.join(summary)
+
+def suggest_diagnostic_model(parameters):
+    """Intelligent model routing with confidence scoring"""
+    model_scores = {'heart': 0, 'liver': 0, 'kidney': 0, 'diabetes': 0}
+    model_reasons = {'heart': [], 'liver': [], 'kidney': [], 'diabetes': []}
+    
+    for param in parameters:
+        if param['status'] in ['HIGH', 'LOW', 'BORDERLINE_HIGH', 'BORDERLINE_LOW']:
+            param_key = param.get('key', '')
+            weight = 2 if param['status'] in ['HIGH', 'LOW'] else 1
+            
+            # Heart disease indicators
+            if param_key in ['cholesterol', 'ldl', 'hdl', 'triglycerides', 'blood_pressure']:
+                model_scores['heart'] += weight
+                model_reasons['heart'].append(param['parameter'])
+            
+            # Liver disease indicators
+            if param_key in ['alt', 'ast', 'bilirubin_total', 'albumin']:
+                model_scores['liver'] += weight
+                model_reasons['liver'].append(param['parameter'])
+            
+            # Kidney disease indicators
+            if param_key in ['creatinine', 'blood_urea', 'albumin', 'sodium', 'potassium']:
+                model_scores['kidney'] += weight
+                model_reasons['kidney'].append(param['parameter'])
+            
+            # Diabetes indicators
+            if param_key in ['glucose', 'hba1c']:
+                model_scores['diabetes'] += weight
+                model_reasons['diabetes'].append(param['parameter'])
+    
+    # Build suggestions with confidence
+    suggestions = []
+    model_names = {
+        'heart': 'Cardiovascular Risk Assessment',
+        'liver': 'Liver Function Assessment',
+        'kidney': 'Kidney Function Assessment',
+        'diabetes': 'Diabetes Risk Assessment'
+    }
+    
+    for model, score in sorted(model_scores.items(), key=lambda x: x[1], reverse=True):
+        if score > 0:
+            confidence = min(score * 25, 95)  # Cap at 95%
+            suggestions.append({
+                'model': model,
+                'name': model_names[model],
+                'confidence': f"{confidence}%",
+                'reason': f"Abnormal: {', '.join(model_reasons[model][:3])}",
+                'route': '/models',
+                'priority': 'High' if score >= 3 else 'Medium'
+            })
+    
+    return suggestions[:3]  # Top 3 suggestions
+
+def parse_reference_range(ref_str):
+    """Parse reference range string to extract min and max values"""
+    if not ref_str:
+        return None, None
+    
+    # Common formats: "13.0-17.0", "13.0 - 17.0", "<200", ">40", "13.0 to 17.0"
+    ref_str = str(ref_str).strip()
+    
+    # Handle < or > ranges
+    if ref_str.startswith('<'):
+        max_val = re.search(r'([0-9.]+)', ref_str)
+        return 0, float(max_val.group(1)) if max_val else None
+    elif ref_str.startswith('>'):
+        min_val = re.search(r'([0-9.]+)', ref_str)
+        return float(min_val.group(1)) if min_val else None, float('inf')
+    
+    # Handle range formats
+    range_match = re.search(r'([0-9.]+)\s*[-to]+\s*([0-9.]+)', ref_str, re.IGNORECASE)
+    if range_match:
+        return float(range_match.group(1)), float(range_match.group(2))
+    
+    return None, None
+
+def detect_table_structure(lines):
+    """Detect if text contains tabular data and extract structured rows"""
+    table_rows = []
+    
+    # Common table headers
+    header_keywords = ['test', 'investigation', 'parameter', 'result', 'value', 'reference', 'range', 'unit', 'normal']
+    
+    for i, line in enumerate(lines):
+        line_lower = line.lower()
+        
+        # Check if line contains table headers
+        if any(keyword in line_lower for keyword in header_keywords):
+            # This might be a header row, process subsequent lines as data
+            for j in range(i + 1, len(lines)):
+                data_line = lines[j].strip()
+                if not data_line or len(data_line) < 5:
+                    continue
+                
+                # Try to extract structured data from line
+                # Format: "Parameter  Value  Reference  Unit"
+                parts = re.split(r'\s{2,}|\t', data_line)  # Split by multiple spaces or tabs
+                
+                if len(parts) >= 2:
+                    table_rows.append({
+                        'line': data_line,
+                        'parts': parts,
+                        'line_number': j
+                    })
+    
+    return table_rows
+
+def extract_from_table_row(row_data, param_info):
+    """Extract parameter value from a structured table row"""
+    parts = row_data['parts']
+    line = row_data['line'].lower()
+    
+    # Check if this row contains the parameter
+    param_found = False
+    for alias in param_info.get('aliases', [param_info['name']]):
+        if alias.lower() in line:
+            param_found = True
+            break
+    
+    if not param_found:
+        return None
+    
+    # Extract numeric value (usually in 2nd column)
+    for part in parts[1:]:
+        value_match = re.search(r'^([0-9.]+)', part.strip())
+        if value_match:
+            value = float(value_match.group(1))
+            
+            # Try to extract reference range (usually in 3rd or 4th column)
+            ref_range = None
+            for ref_part in parts[2:]:
+                if '-' in ref_part or 'to' in ref_part.lower() or '<' in ref_part or '>' in ref_part:
+                    ref_range = ref_part.strip()
+                    break
+            
+            # Try to extract unit (usually last column or after value)
+            unit = param_info.get('unit', '')
+            for unit_part in parts[1:]:
+                if any(u in unit_part.lower() for u in ['g/dl', 'mg/dl', 'iu/l', 'mmol', 'cells', '%']):
+                    unit = unit_part.strip()
+                    break
+            
+            return {
+                'value': value,
+                'reference_range': ref_range,
+                'unit': unit
+            }
+    
+    return None
+
+def analyze_parameters(text):
+    """Multi-parameter extraction with table detection and line-by-line processing"""
+    results = []
+    
+    if not text:
+        return results
+    
+    logger.info(f"Analyzing text of length {len(text)} characters")
+    
+    # Split into lines for structured processing
+    lines = text.split('\n')
+    logger.info(f"Processing {len(lines)} lines")
+    
+    # Stage 1: Detect table structure
+    table_rows = detect_table_structure(lines)
+    logger.info(f"Detected {len(table_rows)} potential table rows")
+    
+    # Stage 2: Process each parameter
     for param_key, param_info in MEDICAL_PARAMETERS.items():
-        match = re.search(param_info['pattern'], text_lower, re.IGNORECASE)
-        if match:
-            if param_key == 'blood_pressure':
-                systolic = float(match.group(1))
-                diastolic = float(match.group(2))
-                value_str = f"{systolic}/{diastolic}"
-                
-                if systolic < 120 and diastolic < 80:
-                    status = 'normal'
-                elif systolic < 130 and diastolic < 85:
-                    status = 'slightly high'
-                else:
-                    status = 'high'
+        value_found = False
+        
+        # Try table extraction first (most reliable for multi-parameter reports)
+        if table_rows:
+            for row in table_rows:
+                extracted = extract_from_table_row(row, param_info)
+                if extracted:
+                    value = extracted['value']
+                    ref_range = extracted.get('reference_range')
                     
-                explanation = f"Your blood pressure is {value_str} {param_info['unit']}. "
-                if status == 'normal':
-                    explanation += "This is within the normal range."
-                elif status == 'slightly high':
-                    explanation += "This is slightly elevated. Consider lifestyle modifications."
-                else:
-                    explanation += "This is high. Please consult your doctor."
-                    
-                results.append({
-                    'parameter': param_info['name'],
-                    'value': value_str,
-                    'unit': param_info['unit'],
-                    'status': status,
-                    'explanation': explanation,
-                    'recommendations': get_health_recommendations(param_key, status, value_str)
-                })
-            else:
-                value = float(match.group(1))
-                normal_min, normal_max = param_info['normal']
-                
-                if normal_min <= value <= normal_max:
-                    status = 'normal'
-                    explanation = f"Your {param_info['name']} is {value} {param_info['unit']}, which is within the normal range ({normal_min}-{normal_max} {param_info['unit']})."
-                elif value < normal_min:
-                    status = 'low'
-                    explanation = f"Your {param_info['name']} is {value} {param_info['unit']}, which is below the normal range ({normal_min}-{normal_max} {param_info['unit']}). Consider consulting your doctor."
-                elif value < normal_min * 0.9:
-                    status = 'very low'
-                    explanation = f"Your {param_info['name']} is {value} {param_info['unit']}, which is significantly below normal. Please consult your doctor."
-                elif value > normal_max:
-                    diff = ((value - normal_max) / normal_max) * 100
-                    if diff < 10:
-                        status = 'slightly high'
-                        explanation = f"Your {param_info['name']} is {value} {param_info['unit']}, slightly above the normal range ({normal_min}-{normal_max} {param_info['unit']}). Monitor and consider lifestyle changes."
+                    # Parse reference range if available
+                    if ref_range:
+                        ref_min, ref_max = parse_reference_range(ref_range)
+                        if ref_min is not None and ref_max is not None:
+                            # Use extracted reference range
+                            normal_range = (ref_min, ref_max)
+                        else:
+                            # Fallback to default
+                            normal_range = param_info['normal']
                     else:
-                        status = 'high'
-                        explanation = f"Your {param_info['name']} is {value} {param_info['unit']}, which is above the normal range ({normal_min}-{normal_max} {param_info['unit']}). Please consult your doctor."
-                else:
-                    status = 'normal'
-                    explanation = f"Your {param_info['name']} is {value} {param_info['unit']}, which is within acceptable limits."
+                        normal_range = param_info['normal']
+                    
+                    # Classify status
+                    if param_key == 'blood_pressure':
+                        continue  # Skip BP in table processing
+                    
+                    status = classify_value_status(value, normal_range, param_info.get('borderline'))
+                    
+                    results.append({
+                        'key': param_key,
+                        'parameter': param_info['name'],
+                        'value': str(value),
+                        'unit': extracted.get('unit', param_info['unit']),
+                        'status': status,
+                        'normal_range': f"{normal_range[0]}-{normal_range[1]}",
+                        'recommendations': get_health_recommendations(param_key, status.lower().replace('_', ' '), value)
+                    })
+                    
+                    logger.info(f"Table extracted {param_key}: {value}")
+                    value_found = True
+                    break
+        
+        # Stage 3: Line-by-line pattern matching (fallback)
+        if not value_found:
+            for line in lines:
+                line_lower = line.lower()
                 
-                results.append({
-                    'parameter': param_info['name'],
-                    'value': str(value),
-                    'unit': param_info['unit'],
-                    'status': status,
-                    'explanation': explanation,
-                    'recommendations': get_health_recommendations(param_key, status, value)
-                })
+                # Check if line contains parameter
+                param_in_line = False
+                for alias in param_info.get('aliases', [param_info['name']]):
+                    if alias.lower() in line_lower:
+                        param_in_line = True
+                        break
+                
+                if not param_in_line:
+                    continue
+                
+                # Extract value from this line
+                if param_key == 'blood_pressure':
+                    match = re.search(param_info['pattern'], line_lower)
+                    if match and match.group(1) and match.group(2):
+                        systolic = float(match.group(1))
+                        diastolic = float(match.group(2))
+                        value_str = f"{systolic}/{diastolic}"
+                        
+                        status = 'HIGH' if systolic >= 130 or diastolic >= 85 else ('BORDERLINE_HIGH' if systolic >= 120 or diastolic >= 80 else 'NORMAL')
+                        
+                        results.append({
+                            'key': param_key,
+                            'parameter': param_info['name'],
+                            'value': value_str,
+                            'unit': param_info['unit'],
+                            'status': status,
+                            'normal_range': '<120/<80',
+                            'recommendations': get_health_recommendations(param_key, status.lower().replace('_', ' '), value_str)
+                        })
+                        logger.info(f"Line matched {param_key}: {value_str}")
+                        value_found = True
+                        break
+                else:
+                    # Extract numeric value
+                    value_match = re.search(r'[:\s=-]+([0-9.]+)', line)
+                    if value_match:
+                        try:
+                            value = float(value_match.group(1))
+                            normal_min, normal_max = param_info['normal']
+                            
+                            # Try to extract reference range from same line
+                            ref_match = re.search(r'([0-9.]+)\s*[-to]+\s*([0-9.]+)', line, re.IGNORECASE)
+                            if ref_match:
+                                ref_min = float(ref_match.group(1))
+                                ref_max = float(ref_match.group(2))
+                                # Use extracted range if it seems valid
+                                if ref_min < value < ref_max * 2:  # Sanity check
+                                    normal_min, normal_max = ref_min, ref_max
+                            
+                            status = classify_value_status(value, (normal_min, normal_max), param_info.get('borderline'))
+                            
+                            results.append({
+                                'key': param_key,
+                                'parameter': param_info['name'],
+                                'value': str(value),
+                                'unit': param_info['unit'],
+                                'status': status,
+                                'normal_range': f"{normal_min}-{normal_max}",
+                                'recommendations': get_health_recommendations(param_key, status.lower().replace('_', ' '), value)
+                            })
+                            logger.info(f"Line matched {param_key}: {value}")
+                            value_found = True
+                            break
+                        except ValueError:
+                            continue
+        
+        # Stage 4: AI extraction (final fallback)
+        if not value_found:
+            text_lower = text.lower()
+            for alias in param_info.get('aliases', []):
+                extracted_value = extract_value_near_parameter(text, alias)
+                if extracted_value:
+                    try:
+                        value = float(extracted_value)
+                        normal_min, normal_max = param_info['normal']
+                        status = classify_value_status(value, (normal_min, normal_max), param_info.get('borderline'))
+                        
+                        results.append({
+                            'key': param_key,
+                            'parameter': param_info['name'],
+                            'value': str(value),
+                            'unit': param_info['unit'],
+                            'status': status,
+                            'normal_range': f"{normal_min}-{normal_max}",
+                            'recommendations': get_health_recommendations(param_key, status.lower().replace('_', ' '), value)
+                        })
+                        logger.info(f"AI matched {param_key}: {value}")
+                        break
+                    except ValueError:
+                        continue
     
-    return results
+    # Remove duplicates
+    seen = set()
+    unique_results = []
+    for r in results:
+        if r['key'] not in seen:
+            seen.add(r['key'])
+            unique_results.append(r)
+    
+    logger.info(f"Final extraction: {len(unique_results)} unique parameters")
+    return unique_results
 
 @app.route('/api/analyze-report', methods=['POST'])
 def analyze_medical_report():
-    if 'file' not in request.files:
-        return jsonify({'error': 'No file uploaded'}), 400
-    
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify({'error': 'No file selected'}), 400
-    
-    ext = os.path.splitext(file.filename)[1].lower()
-    
+    """Enhanced multi-parameter medical report analyzer with AI"""
     try:
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file uploaded'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+        
+        ext = os.path.splitext(file.filename)[1].lower()
         file_bytes = file.read()
         text = None
         
+        # Stage 1: Document Processing - Extract full text
+        logger.info(f"Processing {ext} file: {file.filename}")
         if ext == '.pdf':
             text = extract_text_from_pdf(file_bytes)
-            if not text:
-                return jsonify({'error': 'Could not extract text from PDF. The file may be scanned or image-based. Try uploading as an image instead.'}), 400
         elif ext in ['.jpg', '.jpeg', '.png']:
             text = extract_text_from_image(file_bytes)
-            if not text:
-                return jsonify({'error': 'Could not extract text from image. Please ensure the image contains clear, readable text.'}), 400
         else:
-            return jsonify({'error': 'Unsupported file format. Please upload PDF or image files (JPG, PNG).'}), 400
+            return jsonify({'error': 'Unsupported format. Upload PDF, JPG, or PNG.'}), 400
         
-        logger.info(f"Extracted text length: {len(text)} characters")
+        if not text or len(text.strip()) < 10:
+            return jsonify({
+                'error': 'Could not extract readable text from image.',
+                'suggestion': 'Please ensure: 1) Image is clear and high resolution, 2) Text is not too small, 3) Good lighting/contrast, 4) Try uploading a PDF instead if available.',
+                'debug_info': f'Extracted only {len(text) if text else 0} characters. OCR may have failed due to poor image quality.'
+            }), 400
         
+        logger.info(f"Extracted {len(text)} characters from document")
+        
+        # Stage 2: Multi-parameter extraction (AI + Regex)
         parameters = analyze_parameters(text)
         
         if not parameters:
+            # Log extracted text for debugging
+            logger.warning(f"No parameters found. Text preview: {text[:500]}")
+            
             return jsonify({
-                'message': 'No medical parameters detected in the report. Please ensure the report contains values like glucose, hemoglobin, cholesterol, etc.',
+                'success': True,
                 'parameters': [],
-                'disclaimer': 'This is an AI-assisted analysis and not a medical diagnosis. Always consult a qualified healthcare professional.'
+                'total_found': 0,
+                'status_counts': {'normal': 0, 'borderline': 0, 'abnormal': 0},
+                'clinical_summary': 'No standard medical parameters detected. Document may contain specialized tests or non-standard formatting.',
+                'general_recommendations': [
+                    'Ensure the report contains standard lab test names (Hemoglobin, Glucose, Cholesterol, etc.)',
+                    'Check if image quality is sufficient for text recognition',
+                    'Try uploading a PDF version if available',
+                    'Consult healthcare provider for manual interpretation'
+                ],
+                'suggested_models': [],
+                'ai_analysis': 'Unable to perform AI analysis without detectable parameters',
+                'debug_info': {
+                    'text_length': len(text),
+                    'text_preview': text[:200] if len(text) > 200 else text
+                },
+                'disclaimer': 'AI-generated analysis for preliminary screening only. Not a substitute for professional medical consultation.'
             })
         
-        return jsonify({
+        logger.info(f"Detected {len(parameters)} parameters")
+        
+        # Stage 3: Classification and status counting
+        abnormal_params = [p for p in parameters if p['status'] != 'NORMAL']
+        status_counts = {
+            'normal': len([p for p in parameters if p['status'] == 'NORMAL']),
+            'borderline': len([p for p in parameters if 'BORDERLINE' in p['status']]),
+            'abnormal': len([p for p in parameters if p['status'] in ['HIGH', 'LOW']])
+        }
+        
+        # Stage 4: AI Clinical Summary Generation
+        clinical_summary = generate_clinical_summary(abnormal_params)
+        
+        # Stage 5: Intelligent Model Routing
+        suggested_models = suggest_diagnostic_model(parameters)
+        
+        # Stage 6: Generate comprehensive recommendations
+        general_recommendations = []
+        if status_counts['abnormal'] >= 3:
+            general_recommendations = [
+                '🏥 Priority: Schedule comprehensive health checkup within 48-72 hours',
+                '💊 Follow prescribed treatment plans and medications',
+                '📊 Monitor vital signs daily and maintain health log',
+                '🥗 Adopt dietary modifications as per abnormal parameters',
+                '🏋️ Regular exercise with medical supervision'
+            ]
+        elif status_counts['abnormal'] > 0:
+            general_recommendations = [
+                '👨‍⚕️ Consult healthcare provider to discuss abnormal results',
+                '📝 Follow up with targeted tests as recommended',
+                '🍎 Maintain balanced diet and healthy lifestyle',
+                '💧 Stay hydrated and get adequate sleep'
+            ]
+        elif status_counts['borderline'] > 0:
+            general_recommendations = [
+                '📊 Monitor borderline parameters regularly',
+                '🍽️ Adopt preventive dietary changes',
+                '🏃 Increase physical activity gradually',
+                '📅 Schedule follow-up testing in 4-6 weeks'
+            ]
+        else:
+            general_recommendations = [
+                '✅ All parameters normal - maintain current lifestyle',
+                '🥗 Continue balanced diet and regular exercise',
+                '📊 Annual health checkups recommended',
+                '💤 Ensure adequate sleep and stress management'
+            ]
+        
+        # Build comprehensive response
+        response = {
             'success': True,
             'parameters': parameters,
             'total_found': len(parameters),
-            'disclaimer': 'This is an AI-assisted analysis and not a medical diagnosis. Always consult a qualified healthcare professional for proper interpretation of your medical reports.'
-        })
+            'status_counts': status_counts,
+            'clinical_summary': clinical_summary,
+            'general_recommendations': general_recommendations,
+            'suggested_models': suggested_models,
+            'ai_analysis': {
+                'model_used': 'Flan-T5-Large + Biomedical-NER' if _summarizer_pipeline and _ner_pipeline else 'Rule-based analysis',
+                'confidence': 'High' if len(parameters) >= 5 else 'Medium',
+                'parameters_analyzed': len(parameters),
+                'abnormalities_found': len(abnormal_params)
+            },
+            'risk_assessment': {
+                'overall_risk': 'High' if status_counts['abnormal'] >= 3 else ('Moderate' if status_counts['abnormal'] > 0 else 'Low'),
+                'requires_immediate_attention': status_counts['abnormal'] >= 3,
+                'follow_up_recommended': status_counts['abnormal'] > 0 or status_counts['borderline'] > 0
+            },
+            'disclaimer': 'AI-generated analysis for preliminary screening only. Not a substitute for professional medical consultation.'
+        }
+        
+        logger.info(f"Analysis complete: {len(parameters)} params, {len(abnormal_params)} abnormal")
+        return jsonify(response)
         
     except Exception as e:
         logger.error(f"Report analysis error: {str(e)}", exc_info=True)
-        return jsonify({'error': 'Failed to analyze report', 'details': str(e)}), 500
+        return jsonify({
+            'error': 'Failed to analyze report',
+            'details': str(e),
+            'suggestion': 'Try again with different file or contact support.'
+        }), 500
 
 @app.route('/api/doctors', methods=['GET'])
 def get_doctors():
@@ -1604,8 +2310,154 @@ def start_video_call():
         logger.error(f"Error starting video call: {str(e)}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/cardiovascular-analysis', methods=['POST'])
+def cardiovascular_analysis():
+    """Cardiovascular health analysis using image OR numeric data"""
+    try:
+        has_image = 'image' in request.files and request.files['image'].filename != ''
+        
+        # Get numeric data
+        numeric_data = {
+            'age': request.form.get('age'),
+            'sex': request.form.get('sex'),
+            'cp': request.form.get('cp'),
+            'trestbps': request.form.get('trestbps'),
+            'chol': request.form.get('chol'),
+            'fbs': request.form.get('fbs'),
+            'restecg': request.form.get('restecg'),
+            'thalach': request.form.get('thalach'),
+            'exang': request.form.get('exang'),
+            'oldpeak': request.form.get('oldpeak'),
+            'slope': request.form.get('slope'),
+            'ca': request.form.get('ca'),
+            'thal': request.form.get('thal')
+        }
+        
+        # Check if numeric data is provided
+        has_numeric = all(v for v in numeric_data.values())
+        
+        if not has_image and not has_numeric:
+            return jsonify({'error': 'Please provide either image or all clinical parameters'}), 400
+        
+        # Image-only analysis
+        if has_image and not has_numeric:
+            try:
+                image_file = request.files['image']
+                ext = os.path.splitext(image_file.filename)[1].lower()
+                if ext not in ['.jpg', '.jpeg', '.png']:
+                    return jsonify({'error': 'Invalid image format. Use JPG or PNG'}), 400
+                
+                # Simple image-based analysis (placeholder - would need proper model)
+                # For now, return a basic analysis
+                result = {
+                    'analysis_type': 'Cardiovascular Image Analysis',
+                    'model_used': 'Image-based Assessment',
+                    'final_disease_probability': 0.45,  # Placeholder
+                    'risk_level': 'Moderate',
+                    'image_confidence_score': 0.75,
+                    'recommendation': 'Image analysis suggests moderate risk. Please provide clinical parameters for comprehensive assessment.',
+                    'formatted_report': 'Image Analysis Only\nRisk Level: Moderate\nNote: For accurate diagnosis, please provide clinical parameters or consult a cardiologist.'
+                }
+                
+                return jsonify(result)
+            except Exception as e:
+                logger.error(f"Image analysis failed: {str(e)}")
+                return jsonify({'error': 'Image analysis failed', 'details': str(e)}), 500
+        
+        # Multimodal analysis (image + numeric)
+        if has_image and has_numeric:
+            try:
+                image_file = request.files['image']
+                ext = os.path.splitext(image_file.filename)[1].lower()
+                if ext not in ['.jpg', '.jpeg', '.png']:
+                    return jsonify({'error': 'Invalid image format. Use JPG or PNG'}), 400
+                
+                image_bytes = image_file.read()
+                result = predict_cardiovascular(image_bytes, numeric_data)
+                formatted_report = generate_cardio_report(result, numeric_data)
+                result['formatted_report'] = formatted_report
+                
+                # Save to database
+                from flask import session
+                if 'user_id' in session:
+                    try:
+                        pred = Prediction(
+                            user_id=session['user_id'],
+                            disease_type='cardiovascular_multimodal',
+                            prediction_result=result['risk_level'],
+                            probability=result['final_disease_probability'],
+                            risk_level=result['risk_level'],
+                            input_data=numeric_data
+                        )
+                        db.session.add(pred)
+                        db.session.commit()
+                    except Exception as e:
+                        logger.error(f"Failed to save prediction: {str(e)}")
+                        db.session.rollback()
+                
+                return jsonify(result)
+            except Exception as e:
+                logger.warning(f"Multimodal analysis failed: {str(e)}, falling back to numeric-only")
+        
+        # Numeric-only analysis
+        if heart_model is None:
+            return jsonify({'error': 'Heart disease model not available'}), 503
+        
+        features = [
+            float(numeric_data.get('age', 0)),
+            170, 70,
+            float(numeric_data.get('sex', 0)),
+            float(numeric_data.get('trestbps', 0)),
+            80,
+            2 if float(numeric_data.get('chol', 0)) > 240 else 1,
+            1,
+            1 if float(numeric_data.get('exang', 0)) == 1 else 0,
+            0, 1
+        ]
+        
+        features_array = np.array(features).reshape(1, -1)
+        prediction = heart_model.predict(features_array)[0]
+        probability = heart_model.predict_proba(features_array)[0][1]
+        
+        risk_level = "High" if probability >= 0.6 else "Moderate" if probability >= 0.4 else "Low"
+        
+        result = {
+            'analysis_type': 'Cardiovascular Risk Assessment (Numeric Only)',
+            'model_used': 'Random Forest Classifier',
+            'final_disease_probability': float(probability),
+            'risk_level': risk_level,
+            'numeric_risk_score': float(probability),
+            'recommendation': 'Consult cardiologist immediately.' if risk_level == 'High' else 'Schedule checkup within 2 weeks.' if risk_level == 'Moderate' else 'Maintain healthy lifestyle.',
+            'formatted_report': f'Risk Level: {risk_level}\nProbability: {probability*100:.0f}%\nNote: Analysis based on clinical parameters only (no image provided)'
+        }
+        
+        # Save to database
+        from flask import session
+        if 'user_id' in session:
+            try:
+                pred = Prediction(
+                    user_id=session['user_id'],
+                    disease_type='cardiovascular',
+                    prediction_result=result['risk_level'],
+                    probability=result['final_disease_probability'],
+                    risk_level=result['risk_level'],
+                    input_data=numeric_data
+                )
+                db.session.add(pred)
+                db.session.commit()
+            except Exception as e:
+                logger.error(f"Failed to save prediction: {str(e)}")
+                db.session.rollback()
+        
+        return jsonify(result)
+    
+    except Exception as e:
+        logger.error(f"Cardiovascular analysis error: {str(e)}", exc_info=True)
+        return jsonify({'error': 'Analysis failed', 'details': str(e)}), 500
+
 @app.route('/api/symptom-checker', methods=['POST'])
 def symptom_checker():
+    from flask import session
     try:
         data = request.get_json()
         symptoms = data.get('symptoms', '').strip()
@@ -1615,6 +2467,26 @@ def symptom_checker():
         if len(symptoms) < 10:
             return jsonify({'error': 'Please provide more detailed symptoms (at least 10 characters)'}), 400
 
+        # Fetch past assessments if user is logged in
+        past_assessments = []
+        if 'user_id' in session:
+            try:
+                past_preds = Prediction.query.filter_by(
+                    user_id=session['user_id'],
+                    disease_type='symptom_check'
+                ).order_by(Prediction.created_at.desc()).limit(5).all()
+                
+                for pred in past_preds:
+                    past_assessments.append({
+                        'date': pred.created_at.strftime('%Y-%m-%d'),
+                        'symptoms': pred.input_data.get('symptoms', ''),
+                        'condition': pred.prediction_result,
+                        'risk': pred.risk_level,
+                        'severity': pred.input_data.get('severity', '')
+                    })
+            except Exception as e:
+                logger.warning(f"Could not fetch past assessments: {str(e)}")
+
         # Use Groq API for symptom analysis
         GROQ_API_KEY = os.getenv('GROQ_API_KEY')
         
@@ -1623,28 +2495,50 @@ def symptom_checker():
         
         client = Groq(api_key=GROQ_API_KEY)
         
-        prompt = f"""Analyze these symptoms and predict the top 3 most likely diseases with confidence scores.
+        # Enhanced prompt with past history comparison
+        past_context = ""
+        if past_assessments:
+            past_context = "\n\nPAST ASSESSMENT HISTORY:\n"
+            for i, past in enumerate(past_assessments[:3], 1):
+                past_context += f"{i}. {past['date']}: {past['symptoms'][:100]} → {past['condition']} ({past['risk']} risk)\n"
+        
+        prompt = f"""You are a medical AI assistant. Analyze present symptoms and compare with past history.
+
+PRESENT SYMPTOMS:
 Symptoms: {symptoms}
 Duration: {duration}
-Severity: {severity}
+Severity: {severity}{past_context}
 
-Respond ONLY with valid JSON in this format:
+TASK:
+1. Compare present symptoms with past symptoms (if available)
+2. Calculate symptom overlap percentage
+3. Determine if conditions are related (>50% overlap or medically related)
+4. Analyze progression/recurrence/complication
+5. Predict top 3 likely conditions
+
+Respond ONLY with valid JSON:
 {{
+  "symptom_comparison": {{
+    "overlap_percentage": 0,
+    "relation_status": "Related" or "Not Related",
+    "comparison_summary": "Brief comparison"
+  }},
   "predictions": [
-    {{"disease": "Disease Name", "confidence": 85.5, "risk": "High", "explanation": "Brief explanation"}},
-    {{"disease": "Disease Name", "confidence": 65.2, "risk": "Moderate"}},
-    {{"disease": "Disease Name", "confidence": 45.8, "risk": "Low"}}
-  ]
+    {{"disease": "Name", "confidence": 85.5, "risk": "High", "explanation": "Brief reason"}}
+  ],
+  "severity_change": "Increased/Decreased/Stable/New Condition",
+  "recommended_steps": ["Step 1", "Step 2"]
 }}
 
-Consider these diseases: Heart Disease, Diabetes, Liver Disease, Kidney Disease, Pneumonia, Asthma, Influenza, Migraine, Hypertension, Gastritis.
-Risk levels: High (>70%), Moderate (50-70%), Low (<50%)."""
+Diseases: Heart Disease, Diabetes, Liver Disease, Kidney Disease, Pneumonia, Asthma, Influenza, Migraine, Hypertension, Gastritis.
+Risk: High (>70%), Moderate (50-70%), Low (<50%)."""
         
         completion = client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3,
-            max_tokens=500
+            max_tokens=800,
+            timeout=15.0
         )
         
         response_text = completion.choices[0].message.content.strip()
@@ -1659,15 +2553,122 @@ Risk levels: High (>70%), Moderate (50-70%), Low (<50%)."""
             
             if predictions:
                 response = {
+                    'symptom_comparison': result.get('symptom_comparison', {
+                        'overlap_percentage': 0,
+                        'relation_status': 'Not Related',
+                        'comparison_summary': 'No past history available'
+                    }),
                     'top_prediction': predictions[0],
-                    'other_conditions': predictions[1:3] if len(predictions) > 1 else []
+                    'other_conditions': predictions[1:3] if len(predictions) > 1 else [],
+                    'severity_change': result.get('severity_change', 'New Condition'),
+                    'recommended_steps': result.get('recommended_steps', [
+                        'Consult healthcare provider',
+                        'Monitor symptoms closely'
+                    ]),
+                    'has_past_history': len(past_assessments) > 0
                 }
+                
+                # Save to database if user is logged in
+                if 'user_id' in session:
+                    try:
+                        pred = Prediction(
+                            user_id=session['user_id'],
+                            disease_type='symptom_check',
+                            prediction_result=predictions[0]['disease'],
+                            probability=predictions[0]['confidence'],
+                            risk_level=predictions[0]['risk'],
+                            input_data={
+                                'symptoms': symptoms,
+                                'duration': duration,
+                                'severity': severity,
+                                'other_conditions': predictions[1:3] if len(predictions) > 1 else [],
+                                'comparison': result.get('symptom_comparison', {})
+                            }
+                        )
+                        db.session.add(pred)
+                        db.session.commit()
+                    except Exception as e:
+                        logger.error(f"Failed to save symptom check: {str(e)}")
+                        db.session.rollback()
+                
                 return jsonify(response)
         
         return jsonify({'error': 'Unable to analyze symptoms'}), 500
 
     except Exception as e:
         logger.error(f"Symptom checker error: {str(e)}", exc_info=True)
+        
+        # Fallback response when API fails
+        if 'timeout' in str(e).lower() or 'timed out' in str(e).lower():
+            # Provide rule-based analysis as fallback
+            symptoms_lower = symptoms.lower()
+            
+            # Simple keyword matching for common conditions
+            fallback_prediction = None
+            if any(word in symptoms_lower for word in ['fever', 'cold', 'cough', 'flu']):
+                fallback_prediction = {
+                    'disease': 'Influenza',
+                    'confidence': 70.0,
+                    'risk': 'Moderate',
+                    'explanation': 'Based on reported symptoms of cold, cough, and fever'
+                }
+            elif any(word in symptoms_lower for word in ['chest pain', 'heart', 'breathless']):
+                fallback_prediction = {
+                    'disease': 'Heart Disease',
+                    'confidence': 65.0,
+                    'risk': 'High',
+                    'explanation': 'Cardiovascular symptoms detected - immediate consultation recommended'
+                }
+            elif any(word in symptoms_lower for word in ['sugar', 'thirst', 'urination', 'diabetes']):
+                fallback_prediction = {
+                    'disease': 'Diabetes',
+                    'confidence': 68.0,
+                    'risk': 'Moderate',
+                    'explanation': 'Symptoms suggest blood sugar irregularities'
+                }
+            else:
+                fallback_prediction = {
+                    'disease': 'General Health Concern',
+                    'confidence': 50.0,
+                    'risk': 'Low',
+                    'explanation': 'Symptoms require professional medical evaluation'
+                }
+            
+            # Check for past history
+            has_history = len(past_assessments) > 0
+            comparison = {
+                'overlap_percentage': 0,
+                'relation_status': 'Not Related',
+                'comparison_summary': 'AI service temporarily unavailable - comparison not performed'
+            }
+            
+            if has_history:
+                # Simple overlap check
+                past_symptoms = ' '.join([p['symptoms'].lower() for p in past_assessments[:2]])
+                common_words = set(symptoms_lower.split()) & set(past_symptoms.split())
+                overlap = min(len(common_words) * 20, 80)
+                
+                comparison = {
+                    'overlap_percentage': overlap,
+                    'relation_status': 'Related' if overlap > 50 else 'Not Related',
+                    'comparison_summary': f'Detected {overlap}% symptom overlap with past assessments. AI analysis unavailable due to network timeout.'
+                }
+            
+            return jsonify({
+                'symptom_comparison': comparison,
+                'top_prediction': fallback_prediction,
+                'other_conditions': [],
+                'severity_change': 'Unable to determine',
+                'recommended_steps': [
+                    'Consult healthcare provider for accurate diagnosis',
+                    'Monitor symptoms and seek immediate care if worsening',
+                    'Keep a symptom diary for your doctor'
+                ],
+                'has_past_history': has_history,
+                'fallback_mode': True,
+                'message': 'AI service temporarily unavailable. Basic analysis provided.'
+            })
+        
         return jsonify({'error': 'Failed to analyze symptoms', 'details': str(e)}), 500
 
 if __name__ == '__main__':

@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { Container as MuiContainer } from '@mui/material';
+import BackButton from '../components/BackButton';
 import {
   Container,
   Typography,
@@ -138,6 +140,17 @@ const Assistant = () => {
 
   const handleInputChange = (field) => (event) => {
     const value = event.target.value;
+    
+    if (field === 'age') {
+      const age = parseInt(value);
+      if (age > 90) {
+        setError('Age must be 90 or below');
+        return;
+      } else {
+        setError('');
+      }
+    }
+    
     setFormData(prev => ({
       ...prev,
       [field]: value
@@ -295,6 +308,9 @@ Format:
 
   return (
     <PageContainer maxWidth="lg">
+      <MuiContainer maxWidth="lg" sx={{ mb: 2 }}>
+        <BackButton />
+      </MuiContainer>
       <HeaderSection>
         <Box sx={{ textAlign: 'center' }}>
           <Box
@@ -369,6 +385,9 @@ Format:
                     onChange={handleInputChange('age')}
                     variant="outlined"
                     size="small"
+                    inputProps={{ max: 90 }}
+                    error={formData.age && parseInt(formData.age) > 90}
+                    helperText={formData.age && parseInt(formData.age) > 90 ? 'Age must be 90 or below' : ''}
                   />
                 </Grid>
                 <Grid item xs={6}>

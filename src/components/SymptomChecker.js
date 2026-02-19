@@ -37,6 +37,16 @@ const SymptomChecker = () => {
       return;
     }
 
+    if (!duration) {
+      setError('Please select duration');
+      return;
+    }
+
+    if (!severity) {
+      setError('Please select severity');
+      return;
+    }
+
     setLoading(true);
     setError('');
     setResult(null);
@@ -45,6 +55,7 @@ const SymptomChecker = () => {
       const response = await fetch('http://localhost:5000/api/symptom-checker', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ symptoms, duration, severity })
       });
 
@@ -106,7 +117,7 @@ const SymptomChecker = () => {
 
             <Grid container spacing={2} sx={{ mb: 3 }}>
               <Grid item xs={12} sm={6}>
-                <FormControl fullWidth>
+                <FormControl fullWidth required>
                   <InputLabel>Duration</InputLabel>
                   <Select
                     value={duration}
@@ -123,7 +134,7 @@ const SymptomChecker = () => {
               </Grid>
 
               <Grid item xs={12} sm={6}>
-                <FormControl fullWidth>
+                <FormControl fullWidth required>
                   <InputLabel>Severity</InputLabel>
                   <Select
                     value={severity}
@@ -166,6 +177,71 @@ const SymptomChecker = () => {
 
       {result && (
         <>
+          {result.fallback_mode && (
+            <Alert severity="warning" sx={{ mb: 3 }}>
+              <Typography variant="body2" fontWeight={600}>
+                ⚠️ AI service temporarily unavailable. Basic rule-based analysis provided. For accurate diagnosis, please consult a healthcare professional.
+              </Typography>
+            </Alert>
+          )}
+
+          {/* Symptom Comparison Card */}
+          {result.has_past_history && result.symptom_comparison && (
+            <Card sx={{ mb: 3, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', borderRadius: 3, border: '2px solid #0ea5e9' }}>
+              <CardContent sx={{ p: 3 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                  <Activity size={28} color="#0ea5e9" style={{ marginRight: 12 }} />
+                  <Typography variant="h6" fontWeight={800}>
+                    Symptom Comparison Summary
+                  </Typography>
+                </Box>
+
+                <Grid container spacing={2} sx={{ mb: 2 }}>
+                  <Grid item xs={12} sm={6}>
+                    <Paper elevation={0} sx={{ p: 2, bgcolor: '#f0f9ff', borderRadius: 2 }}>
+                      <Typography variant="caption" color="textSecondary" fontWeight={600}>
+                        Relation Status
+                      </Typography>
+                      <Chip
+                        label={result.symptom_comparison.relation_status}
+                        sx={{
+                          mt: 1,
+                          bgcolor: result.symptom_comparison.relation_status === 'Related' ? '#f59e0b' : '#10b981',
+                          color: 'white',
+                          fontWeight: 700
+                        }}
+                      />
+                    </Paper>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <Paper elevation={0} sx={{ p: 2, bgcolor: '#f0f9ff', borderRadius: 2 }}>
+                      <Typography variant="caption" color="textSecondary" fontWeight={600}>
+                        Symptom Overlap
+                      </Typography>
+                      <Typography variant="h5" fontWeight={800} sx={{ mt: 0.5 }}>
+                        {result.symptom_comparison.overlap_percentage}%
+                      </Typography>
+                    </Paper>
+                  </Grid>
+                </Grid>
+
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  <Typography variant="body2" fontWeight={600}>
+                    {result.symptom_comparison.comparison_summary}
+                  </Typography>
+                </Alert>
+
+                {result.severity_change && result.severity_change !== 'New Condition' && (
+                  <Box sx={{ p: 2, bgcolor: '#fef3c7', borderRadius: 2, border: '1px solid #fbbf24' }}>
+                    <Typography variant="subtitle2" fontWeight={700} color="#92400e">
+                      Severity Change: {result.severity_change}
+                    </Typography>
+                  </Box>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           <Card sx={{ mb: 3, boxShadow: '0 4px 16px rgba(0,0,0,0.1)', borderRadius: 3 }}>
             <CardContent sx={{ p: 0 }}>
               <Box
@@ -403,6 +479,20 @@ const SymptomChecker = () => {
                       </Paper>
                     ))}
                   </>
+                )}
+
+                {result.recommended_steps && result.recommended_steps.length > 0 && (
+                  <Paper elevation={0} sx={{ p: 2.5, mt: 2.5, borderRadius: 2, border: '1px solid #e5e7eb', bgcolor: '#fefce8' }}>
+                    <Typography variant="subtitle1" fontWeight={700} gutterBottom sx={{ color: '#854d0e' }}>
+                      🎯 Recommended Next Steps
+                    </Typography>
+                    {result.recommended_steps.map((step, idx) => (
+                      <Box key={idx} sx={{ display: 'flex', alignItems: 'flex-start', mt: 1 }}>
+                        <CheckCircle size={16} color="#ca8a04" style={{ marginRight: 8, marginTop: 2 }} />
+                        <Typography variant="body2">{step}</Typography>
+                      </Box>
+                    ))}
+                  </Paper>
                 )}
               </Box>
             </CardContent>

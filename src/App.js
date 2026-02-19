@@ -23,6 +23,7 @@ import HeartForm from './components/HeartForm';
 import LiverForm from './components/LiverForm';
 import KidneyForm from './components/KidneyForm';
 import BoneForm from './components/BoneForm';
+import CardiovascularMultimodal from './components/CardiovascularMultimodal';
 import MeetDoctor from './components/MeetDoctor';
 import VideoConsultation from './pages/VideoConsultation';
 import About from './pages/About';
@@ -85,6 +86,7 @@ function AppContent() {
             <Route path="/meet-doctor" element={<Container className="py-4"><MeetDoctor /></Container>} />
             <Route path="/diabetes" element={<Container className="py-4"><DiabetesForm /></Container>} />
             <Route path="/heart" element={<Container className="py-4"><HeartForm /></Container>} />
+            <Route path="/cardiovascular-multimodal" element={<Container className="py-4"><CardiovascularMultimodal /></Container>} />
             <Route path="/liver" element={<Container className="py-4"><LiverForm /></Container>} />
             <Route path="/kidney" element={<Container className="py-4"><KidneyForm /></Container>} />
             <Route path="/bone" element={<Container className="py-4"><BoneForm /></Container>} />

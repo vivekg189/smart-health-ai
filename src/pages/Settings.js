@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Container, Box, Typography, Tabs, Tab, TextField, Button, Switch, FormControlLabel, Select, MenuItem, Alert, CircularProgress, Chip, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
 import { User, Heart, Bell, Shield, Lock, Save, Download, Trash2, AlertCircle } from 'lucide-react';
+import BackButton from '../components/BackButton';
 
 const Settings = () => {
   const [activeTab, setActiveTab] = useState(0);
@@ -237,6 +238,7 @@ const Settings = () => {
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
+      <BackButton />
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 4 }}>
         <Typography variant="h4" fontWeight={700}>Settings</Typography>
       </Box>

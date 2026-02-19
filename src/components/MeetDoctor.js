@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import BackButton from './BackButton';
 import {
   Container,
   Typography,
@@ -166,6 +167,7 @@ const MeetDoctor = () => {
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
+      <BackButton />
       <Typography variant="h3" gutterBottom align="center" sx={{ mb: 4, fontWeight: 'bold' }}>
         Nearby Doctors
       </Typography>

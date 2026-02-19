@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import BackButton from '../components/BackButton';
 import {
   Container,
   Typography,
@@ -198,6 +199,9 @@ const HospitalFinder = () => {
 
   return (
     <PageContainer maxWidth="lg">
+      <Box sx={{ mb: 2 }}>
+        <BackButton />
+      </Box>
       <HeaderSection>
         <HospitalIcon sx={{ fontSize: 48, mb: 1 }} />
         <GradientTitle variant="h3" component="h1">

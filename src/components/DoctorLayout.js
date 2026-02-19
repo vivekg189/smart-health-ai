@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Outlet } from 'react-router-dom';
 import { Navbar, Nav, Button, Container, Offcanvas } from 'react-bootstrap';
 import { useAuth } from '../context/AuthContext';
-import { Home, FileText, Users, Video, ClipboardList, TrendingUp, Bell, ToggleLeft, User, LogOut, Menu } from 'lucide-react';
+import { Home, FileText, Users, Video, ClipboardList, TrendingUp, Bell, ToggleLeft, User, LogOut, Menu, CheckSquare } from 'lucide-react';
 
 const DoctorLayout = () => {
   const { user, logout } = useAuth();

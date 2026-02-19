@@ -46,7 +46,8 @@ import {
   Route,
   Stethoscope,
   Siren,
-  Info
+  Info,
+  History
 } from 'lucide-react';
 import { styled } from '@mui/material/styles';
 import { Line } from 'react-chartjs-2';
@@ -369,6 +370,16 @@ const PatientDashboard = () => {
     return 25;
   };
 
+  const getStatusBadge = (status) => {
+    const config = {
+      'pending_review': { label: 'Pending Review', color: 'warning', icon: '⏳' },
+      'clinically_verified': { label: 'Approved by Doctor', color: 'success', icon: '✓' },
+      'modified_by_doctor': { label: 'Modified by Doctor', color: 'info', icon: '✎' },
+      'rejected_reeval_required': { label: 'Rejected - Re-evaluation Required', color: 'error', icon: '✗' }
+    };
+    return config[status] || config['pending_review'];
+  };
+
   const mask = (value) => (privacyMode ? '•••' : value);
 
   const getNextAppointment = () => {
@@ -608,6 +619,7 @@ const PatientDashboard = () => {
               <Tab value="overview" label="Overview" />
               <Tab value="appointments" label="My Appointments" />
               <Tab value="doctors" label="Meet My Doctors" />
+              <Tab value="history" label="Health History" />
             </Tabs>
           </CardContent>
         </GlassCard>
@@ -985,9 +997,17 @@ const PatientDashboard = () => {
                         {predictions.slice(0, 4).map((pred, idx) => (
                           <Grid item xs={12} md={6} key={idx}>
                             <Paper sx={{ p: 2, bgcolor: '#f5f5f5' }}>
-                              <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-                                {pred.disease_type}
-                              </Typography>
+                              <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 1 }}>
+                                <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+                                  {pred.disease_type}
+                                </Typography>
+                                <Chip
+                                  label={`${getStatusBadge(pred.status).icon} ${getStatusBadge(pred.status).label}`}
+                                  color={getStatusBadge(pred.status).color}
+                                  size="small"
+                                  sx={{ fontWeight: 600 }}
+                                />
+                              </Stack>
                               <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                                 <Box sx={{ flex: 1, mr: 2 }}>
                                   <LinearProgress
@@ -1019,6 +1039,33 @@ const PatientDashboard = () => {
                               <Typography variant="caption" color="textSecondary" sx={{ ml: 1 }}>
                                 {new Date(pred.created_at).toLocaleDateString()}
                               </Typography>
+                              {pred.doctor_remarks && (
+                                <Alert severity="info" sx={{ mt: 1.5 }}>
+                                  <Typography variant="caption" fontWeight={600}>Doctor's Remarks:</Typography>
+                                  <Typography variant="body2">{pred.doctor_remarks}</Typography>
+                                </Alert>
+                              )}
+                              {pred.status === 'clinically_verified' && (
+                                <Button
+                                  size="small"
+                                  variant="contained"
+                                  onClick={() => navigate('/hospital-finder')}
+                                  sx={{ mt: 1.5, width: '100%' }}
+                                >
+                                  Find Hospitals
+                                </Button>
+                              )}
+                              {pred.status === 'rejected_reeval_required' && (
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  color="error"
+                                  onClick={() => navigate('/meet-doctor')}
+                                  sx={{ mt: 1.5, width: '100%' }}
+                                >
+                                  Book Video Consultation
+                                </Button>
+                              )}
                             </Paper>
                           </Grid>
                         ))}
@@ -1333,7 +1380,7 @@ const PatientDashboard = () => {
                       <CardContent sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
                           <Typography variant="h6" fontWeight={600}>
-                            Dr. {apt.doctor_name}
+                            Dr. {apt.doctor_name.charAt(0).toUpperCase() + apt.doctor_name.slice(1)}
                           </Typography>
                           <StatusChip
                             label={apt.status.toUpperCase()}
@@ -1423,7 +1470,7 @@ const PatientDashboard = () => {
             <Grid container spacing={3}>
               <Grid item xs={12}>
                 <Typography variant="h5" gutterBottom>
-                  Meet Our Doctors
+                  Meet My Doctors
                 </Typography>
                 <Typography variant="body2" color="textSecondary" gutterBottom>
                   Book an appointment with our registered doctors
@@ -1443,7 +1490,7 @@ const PatientDashboard = () => {
                             <User size={40} color="#1976d2" style={{ marginRight: 16 }} />
                             <Box>
                               <Typography variant="h6" fontWeight={600}>
-                                {doctor.name}
+                                Dr. {doctor.name.charAt(0).toUpperCase() + doctor.name.slice(1)}
                               </Typography>
                               <Typography variant="body2" color="textSecondary">
                                 {doctor.specialization}
@@ -1491,6 +1538,194 @@ const PatientDashboard = () => {
                   </Grid>
                 ))
               )}
+            </Grid>
+          )}
+
+          {activeTab === 'history' && (
+            <Grid container spacing={3}>
+              <Grid item xs={12}>
+                <GlassCard>
+                  <CardContent sx={{ p: 3 }}>
+                    <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 3 }}>
+                      <Box sx={{
+                        width: 48,
+                        height: 48,
+                        borderRadius: 2,
+                        bgcolor: 'rgba(77, 182, 172, 0.12)',
+                        border: '1px solid rgba(77, 182, 172, 0.20)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}>
+                        <History size={24} color="#2E7D6F" />
+                      </Box>
+                      <Box>
+                        <Typography variant="h5" fontWeight={900}>
+                          Health History Timeline
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Complete record of your health assessments and consultations
+                        </Typography>
+                      </Box>
+                    </Stack>
+
+                    {predictions.length === 0 && appointments.length === 0 ? (
+                      <Alert severity="info" icon={<Activity size={20} />}>
+                        No health history yet. Complete assessments and book consultations to build your health timeline.
+                      </Alert>
+                    ) : (
+                      <Box>
+                        {/* Combined Timeline */}
+                        {[...predictions.map(p => ({ ...p, type: 'prediction', date: p.created_at })),
+                          ...appointments.map(a => ({ ...a, type: 'appointment', date: a.created_at }))]
+                          .sort((a, b) => new Date(b.date) - new Date(a.date))
+                          .map((item, idx) => (
+                            <Box key={idx} sx={{ mb: 3, position: 'relative', pl: 4 }}>
+                              {/* Timeline line */}
+                              {idx < predictions.length + appointments.length - 1 && (
+                                <Box sx={{
+                                  position: 'absolute',
+                                  left: 15,
+                                  top: 40,
+                                  bottom: -24,
+                                  width: 2,
+                                  bgcolor: 'rgba(77, 182, 172, 0.2)'
+                                }} />
+                              )}
+                              
+                              {/* Timeline dot */}
+                              <Box sx={{
+                                position: 'absolute',
+                                left: 8,
+                                top: 8,
+                                width: 16,
+                                height: 16,
+                                borderRadius: '50%',
+                                bgcolor: item.type === 'prediction' ? '#4DB6AC' : '#0EA5E9',
+                                border: '3px solid white',
+                                boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
+                              }} />
+
+                              <Paper sx={{ p: 2.5, bgcolor: item.type === 'prediction' ? '#f0fdfa' : '#eff6ff', border: '1px solid', borderColor: item.type === 'prediction' ? 'rgba(77, 182, 172, 0.2)' : 'rgba(14, 165, 233, 0.2)' }}>
+                                <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 1.5 }}>
+                                  <Box>
+                                    <Typography variant="h6" fontWeight={700}>
+                                      {item.type === 'prediction' ? `${item.disease_type} Assessment` : `Consultation with Dr. ${item.doctor_name}`}
+                                    </Typography>
+                                    <Typography variant="caption" color="text.secondary">
+                                      {new Date(item.date).toLocaleString()}
+                                    </Typography>
+                                  </Box>
+                                  <Chip
+                                    label={item.type === 'prediction' ? 'Assessment' : item.status}
+                                    size="small"
+                                    sx={{
+                                      fontWeight: 700,
+                                      bgcolor: item.type === 'prediction' ? '#4DB6AC' : item.status === 'completed' ? '#10b981' : item.status === 'accepted' ? '#3b82f6' : '#f59e0b',
+                                      color: 'white'
+                                    }}
+                                  />
+                                </Stack>
+
+                                {item.type === 'prediction' ? (
+                                  <>
+                                    <Box sx={{ mb: 2 }}>
+                                      <LinearProgress
+                                        variant="determinate"
+                                        value={getRiskPercentage(item.risk_level)}
+                                        sx={{
+                                          height: 8,
+                                          borderRadius: 4,
+                                          bgcolor: 'rgba(0,0,0,0.08)',
+                                          '& .MuiLinearProgress-bar': {
+                                            bgcolor: getRiskColor(item.risk_level),
+                                            borderRadius: 4
+                                          }
+                                        }}
+                                      />
+                                    </Box>
+                                    <Stack direction="row" spacing={2} alignItems="center">
+                                      <Chip
+                                        label={`${item.risk_level || 'Normal'} Risk`}
+                                        size="small"
+                                        sx={{
+                                          bgcolor: getRiskColor(item.risk_level),
+                                          color: 'white',
+                                          fontWeight: 600
+                                        }}
+                                      />
+                                      <Typography variant="body2" fontWeight={600}>
+                                        {getRiskPercentage(item.risk_level)}% Risk Level
+                                      </Typography>
+                                    </Stack>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                                      <strong>Symptoms:</strong> {item.symptoms}
+                                    </Typography>
+                                    <Typography variant="body2" color="text.secondary">
+                                      <strong>Date:</strong> {new Date(item.appointment_date).toLocaleDateString()} at {item.appointment_time}
+                                    </Typography>
+                                    {item.status === 'completed' && (
+                                      <Button
+                                        size="small"
+                                        variant="outlined"
+                                        startIcon={<FileText size={16} />}
+                                        onClick={() => viewPrescription(item.id)}
+                                        sx={{ mt: 1.5 }}
+                                      >
+                                        View Prescription
+                                      </Button>
+                                    )}
+                                  </>
+                                )}
+                              </Paper>
+                            </Box>
+                          ))}
+                      </Box>
+                    )}
+                  </CardContent>
+                </GlassCard>
+              </Grid>
+
+              {/* Summary Statistics */}
+              <Grid item xs={12} md={4}>
+                <StyledCard>
+                  <CardContent>
+                    <Typography variant="h6" fontWeight={700} gutterBottom>
+                      Total Assessments
+                    </Typography>
+                    <Typography variant="h3" fontWeight={900} color="primary">
+                      {predictions.length}
+                    </Typography>
+                  </CardContent>
+                </StyledCard>
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <StyledCard>
+                  <CardContent>
+                    <Typography variant="h6" fontWeight={700} gutterBottom>
+                      Total Consultations
+                    </Typography>
+                    <Typography variant="h3" fontWeight={900} color="secondary">
+                      {appointments.length}
+                    </Typography>
+                  </CardContent>
+                </StyledCard>
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <StyledCard>
+                  <CardContent>
+                    <Typography variant="h6" fontWeight={700} gutterBottom>
+                      Completed Visits
+                    </Typography>
+                    <Typography variant="h3" fontWeight={900} sx={{ color: '#10b981' }}>
+                      {appointments.filter(a => a.status === 'completed').length}
+                    </Typography>
+                  </CardContent>
+                </StyledCard>
+              </Grid>
             </Grid>
           )}
         </>
