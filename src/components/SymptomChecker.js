@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   Box,
   Card,
@@ -15,9 +15,10 @@ import {
   FormControl,
   InputLabel,
   Grid,
-  Paper
+  Paper,
+  IconButton
 } from '@mui/material';
-import { Activity, AlertTriangle, CheckCircle, ArrowRight } from 'lucide-react';
+import { Activity, AlertTriangle, CheckCircle, ArrowRight, Mic, MicOff } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const SymptomChecker = () => {
@@ -27,7 +28,90 @@ const SymptomChecker = () => {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
+  const [recording, setRecording] = useState(false);
+  const [mediaRecorder, setMediaRecorder] = useState(null);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const recordingTimerRef = useRef(null);
   const navigate = useNavigate();
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          sampleRate: 44100
+        } 
+      });
+      
+      const options = { mimeType: 'audio/webm;codecs=opus' };
+      if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+        options.mimeType = 'audio/webm';
+      }
+      
+      const recorder = new MediaRecorder(stream, options);
+      const chunks = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunks.push(e.data);
+      };
+      
+      recorder.onstop = async () => {
+        clearInterval(recordingTimerRef.current);
+        setRecordingTime(0);
+        
+        const blob = new Blob(chunks, { type: 'audio/webm' });
+        
+        if (blob.size < 1000) {
+          setError('Recording too short. Please speak longer.');
+          stream.getTracks().forEach(track => track.stop());
+          return;
+        }
+        
+        const formData = new FormData();
+        formData.append('audio', blob, 'recording.webm');
+
+        setLoading(true);
+        try {
+          const res = await fetch('http://localhost:5000/api/transcribe-audio', {
+            method: 'POST',
+            body: formData
+          });
+          const data = await res.json();
+          if (res.ok && data.text) {
+            setSymptoms(data.text);
+            if (data.duration) setDuration(data.duration);
+            if (data.severity) setSeverity(data.severity);
+            setError('');
+          } else {
+            setError(data.error || 'Failed to transcribe audio.');
+          }
+        } catch (err) {
+          setError('Transcription error. Please try again.');
+        }
+        setLoading(false);
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      recorder.start();
+      setMediaRecorder(recorder);
+      setRecording(true);
+      
+      setRecordingTime(0);
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingTime(t => t + 1);
+      }, 1000);
+    } catch (err) {
+      setError('Microphone access denied. Please allow microphone access.');
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorder) {
+      mediaRecorder.stop();
+      setRecording(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -106,17 +190,42 @@ const SymptomChecker = () => {
           </Box>
 
           <form onSubmit={handleSubmit}>
-            <TextField
-              fullWidth
-              multiline
-              rows={4}
-              label="Describe Your Symptoms"
-              placeholder="Example: I have fever, headache and body pain for 2 days."
-              value={symptoms}
-              onChange={(e) => setSymptoms(e.target.value)}
-              sx={{ mb: 2 }}
-              required
-            />
+            <Box sx={{ position: 'relative' }}>
+              <TextField
+                fullWidth
+                multiline
+                rows={4}
+                label="Describe Your Symptoms"
+                placeholder="Example: I have fever, headache and body pain for 2 days."
+                value={symptoms}
+                onChange={(e) => setSymptoms(e.target.value)}
+                disabled={recording}
+                sx={{ mb: 2 }}
+                required
+              />
+              <IconButton
+                onClick={recording ? stopRecording : startRecording}
+                sx={{
+                  position: 'absolute',
+                  right: 10,
+                  top: 10,
+                  bgcolor: recording ? '#ef4444' : '#10b981',
+                  color: 'white',
+                  '&:hover': {
+                    bgcolor: recording ? '#dc2626' : '#059669'
+                  }
+                }}
+                title={recording ? 'Stop recording' : 'Start recording'}
+              >
+                {recording ? <MicOff size={20} /> : <Mic size={20} />}
+              </IconButton>
+            </Box>
+
+            {recording && (
+              <Alert severity="error" sx={{ mb: 2 }}>
+                🔴 Recording... {recordingTime}s - Click the microphone button to stop
+              </Alert>
+            )}
 
             <Grid container spacing={2} sx={{ mb: 3 }}>
               <Grid item xs={12} sm={6}>

@@ -112,6 +112,25 @@ const DiabetesForm = () => {
   const [hospitals, setHospitals] = useState([]);
   const [location, setLocation] = useState(null);
   const [locationError, setLocationError] = useState('');
+  const [userProfile, setUserProfile] = useState(null);
+
+  React.useEffect(() => {
+    const fetchUserProfile = async () => {
+      try {
+        const res = await fetch('http://localhost:5000/api/auth/profile', {
+          credentials: 'include'
+        });
+        if (res.ok) {
+          const data = await res.json();
+          console.log('User Profile Data:', data);
+          setUserProfile(data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch profile:', err);
+      }
+    };
+    fetchUserProfile();
+  }, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -426,7 +445,7 @@ const DiabetesForm = () => {
                           <Grid container spacing={2} sx={{ mb: 2 }}>
                             <Grid item xs={12} sm={4}>
                               <Typography variant="body2">
-                                <strong>Name:</strong> Not Provided
+                                <strong>Name:</strong> {userProfile?.name || 'Not Provided'}
                               </Typography>
                             </Grid>
                             <Grid item xs={6} sm={4}>
@@ -436,7 +455,7 @@ const DiabetesForm = () => {
                             </Grid>
                             <Grid item xs={6} sm={4}>
                               <Typography variant="body2">
-                                <strong>Gender:</strong> Not Provided
+                                <strong>Gender:</strong> {userProfile?.gender || 'Not Provided'}
                               </Typography>
                             </Grid>
                           </Grid>

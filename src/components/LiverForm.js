@@ -17,6 +17,7 @@ import {
   useMediaQuery,
 } from '@mui/material';
 import DownloadIcon from '@mui/icons-material/Download';
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import { generateMedicalReport } from '../utils/reportGenerator';
 import { styled } from '@mui/material/styles';
 
@@ -119,7 +120,7 @@ const LiverForm = () => {
     Albumin: '',
     Albumin_and_Globulin_Ratio: '',
   });
-
+  const [file, setFile] = useState(null);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -250,6 +251,36 @@ const LiverForm = () => {
 
         <Box component="form" onSubmit={handleSubmit} sx={{ mt: 3 }}>
           <Grid container spacing={3}>
+            <Grid item xs={12}>
+              <Box
+                sx={{
+                  border: '2px dashed',
+                  borderColor: file ? 'success.main' : 'grey.400',
+                  borderRadius: 2,
+                  p: 3,
+                  textAlign: 'center',
+                  cursor: 'pointer',
+                  bgcolor: file ? 'success.50' : 'grey.50',
+                  '&:hover': { borderColor: 'primary.main', bgcolor: 'primary.50' }
+                }}
+                onClick={() => document.getElementById('liver-file-input').click()}
+              >
+                <input
+                  id="liver-file-input"
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setFile(e.target.files[0])}
+                  style={{ display: 'none' }}
+                />
+                <CloudUploadIcon sx={{ fontSize: 40, color: 'primary.main', mb: 1 }} />
+                <Typography variant="body1">
+                  {file ? `✅ ${file.name}` : 'Upload Medical Report/Lab Image'}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Supports: JPG, PNG, JPEG
+                </Typography>
+              </Box>
+            </Grid>
             <Grid item xs={12} sm={6}>
               <FormControl fullWidth required>
                 <InputLabel>Gender</InputLabel>

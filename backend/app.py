@@ -729,6 +729,82 @@ def predict_bone_fracture():
         logger.error(f"Bone fracture prediction error: {str(e)}", exc_info=True)
         return jsonify({'error': 'Failed to analyze image', 'details': str(e)}), 500
 
+@app.route('/api/transcribe-audio', methods=['POST'])
+def transcribe_audio():
+    try:
+        if 'audio' not in request.files:
+            return jsonify({'error': 'No audio file provided'}), 400
+        
+        audio_file = request.files['audio']
+        GROQ_API_KEY = os.getenv('GROQ_API_KEY')
+        
+        if not GROQ_API_KEY or not GROQ_AVAILABLE:
+            return jsonify({'error': 'Transcription service unavailable'}), 503
+        
+        # Save to temp file with proper extension
+        import tempfile
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.webm') as tmp:
+            audio_file.save(tmp.name)
+            tmp_path = tmp.name
+        
+        try:
+            with open(tmp_path, 'rb') as f:
+                client = Groq(api_key=GROQ_API_KEY)
+                transcription = client.audio.transcriptions.create(
+                    file=("audio.webm", f.read(), "audio/webm"),
+                    model="whisper-large-v3",
+                    language="en",
+                    temperature=0.0
+                )
+            os.unlink(tmp_path)
+            
+            text = transcription.text if hasattr(transcription, 'text') else str(transcription)
+            
+            # Extract duration and severity using AI
+            duration = None
+            severity = None
+            
+            try:
+                completion = client.chat.completions.create(
+                    model="llama-3.1-8b-instant",
+                    messages=[{
+                        "role": "user",
+                        "content": f"""Extract duration and severity from this symptom description. Respond ONLY with JSON.
+
+Text: {text}
+
+Duration options: "1-2 days", "3-7 days", "1-2 weeks", "More than 2 weeks"
+Severity options: "Mild", "Moderate", "Severe"
+
+JSON format: {{"duration": "value or null", "severity": "value or null"}}"""
+                    }],
+                    temperature=0.1,
+                    max_tokens=100
+                )
+                
+                import json, re
+                response = completion.choices[0].message.content.strip()
+                json_match = re.search(r'\{.*\}', response, re.DOTALL)
+                if json_match:
+                    parsed = json.loads(json_match.group(0))
+                    duration = parsed.get('duration')
+                    severity = parsed.get('severity')
+            except Exception as e:
+                logger.warning(f"Failed to extract duration/severity: {e}")
+            
+            return jsonify({
+                'text': text,
+                'duration': duration,
+                'severity': severity
+            })
+        except Exception as e:
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+            raise e
+    except Exception as e:
+        logger.error(f"Transcription error: {str(e)}", exc_info=True)
+        return jsonify({'error': f'Failed to transcribe: {str(e)}'}), 500
+
 @app.route('/api/groq-chat', methods=['POST'])
 def groq_chat():
     try:
@@ -2432,7 +2508,7 @@ def cardiovascular_analysis():
             'risk_level': risk_level,
             'numeric_risk_score': float(probability),
             'recommendation': 'Consult cardiologist immediately.' if risk_level == 'High' else 'Schedule checkup within 2 weeks.' if risk_level == 'Moderate' else 'Maintain healthy lifestyle.',
-            'formatted_report': f'Risk Level: {risk_level}\nProbability: {probability*100:.0f}%\nNote: Analysis based on clinical parameters only (no image provided)'
+            'formatted_report': f'Risk Level: {risk_level}\nProbability: {probability*100:.0f}%'
         }
         
         # Save to database
@@ -2687,6 +2763,50 @@ Risk: High (>70%), Moderate (50-70%), Low (<50%)."""
             })
         
         return jsonify({'error': 'Failed to analyze symptoms', 'details': str(e)}), 500
+
+@app.route('/api/notifications', methods=['GET'])
+def get_notifications():
+    from flask import session
+    if 'user_id' not in session:
+        return jsonify({'notifications': [], 'unread_count': 0}), 200
+    
+    try:
+        user_id = session['user_id']
+        user = User.query.get(user_id)
+        
+        if not user:
+            return jsonify({'notifications': [], 'unread_count': 0}), 200
+        
+        # Get recent predictions for patients
+        if user.role == 'patient':
+            recent_preds = Prediction.query.filter_by(user_id=user_id).filter(
+                Prediction.status.in_(['clinically_verified', 'rejected_reeval_required', 'modified_by_doctor'])
+            ).order_by(Prediction.updated_at.desc()).limit(10).all()
+            
+            notifications = [{
+                'id': p.id,
+                'type': 'prediction_update',
+                'message': f'Your {p.disease_type} prediction has been {p.status.replace("_", " ")}',
+                'status': p.status,
+                'created_at': p.updated_at.isoformat() if p.updated_at else p.created_at.isoformat()
+            } for p in recent_preds]
+            
+            unread = len([p for p in recent_preds if p.status != 'pending_review'])
+        else:
+            # For doctors - show pending reviews
+            pending = Prediction.query.filter_by(status='pending_review').count()
+            notifications = [{
+                'id': 'pending',
+                'type': 'pending_reviews',
+                'message': f'{pending} predictions awaiting review',
+                'count': pending
+            }] if pending > 0 else []
+            unread = pending
+        
+        return jsonify({'notifications': notifications, 'unread_count': unread})
+    except Exception as e:
+        logger.error(f"Notification error: {str(e)}")
+        return jsonify({'notifications': [], 'unread_count': 0}), 200
 
 if __name__ == '__main__':
     logger.info("Starting Flask application")

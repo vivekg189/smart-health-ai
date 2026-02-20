@@ -102,18 +102,20 @@ const DISEASE_CONFIG = {
 
 const fetchPatientData = async () => {
   try {
-    const response = await fetch('http://localhost:5000/api/user/profile', {
+    const response = await fetch('http://localhost:5000/api/auth/profile', {
       credentials: 'include'
     });
     if (response.ok) {
       const data = await response.json();
       return {
-        name: data.name || data.username,
+        name: data.name || data.username || data.email,
         age: data.age,
         gender: data.gender
       };
     }
-  } catch (e) {}
+  } catch (e) {
+    console.error('Failed to fetch patient data:', e);
+  }
   return {};
 };
 
@@ -285,16 +287,19 @@ export const generateMedicalReport = async (
   doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
 
-  const name = finalPatientInfo.name || 'Not Provided';
+  const name = formData.patientName || finalPatientInfo.name || 'Not Provided';
   const age = formData.age || formData.Age || finalPatientInfo.age || 'Not Provided';
-  const gender = formData.gender ? (formData.gender === '1' ? 'Female' : 'Male') :
+  const gender = formData.patientGender || 
+                 (formData.gender ? (formData.gender === '1' ? 'Female' : 'Male') :
                  formData.Gender ? (formData.Gender === '0' ? 'Female' : 'Male') :
-                 finalPatientInfo.gender || 'Not Provided';
+                 finalPatientInfo.gender) || 'Not Provided';
 
   doc.text(`Name: ${name}`, margin + 5, yPos);
   doc.text(`Age: ${age}`, margin + 75, yPos);
   doc.text(`Gender: ${gender}`, margin + 125, yPos);
   yPos += 12;
+
+  console.log('PDF Patient Info:', { name, age, gender, formData, finalPatientInfo });
 
   /* ===== Clinical Parameters ===== */
   doc.setFont('helvetica', 'bold');

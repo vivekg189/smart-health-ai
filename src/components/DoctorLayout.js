@@ -11,11 +11,10 @@ const DoctorLayout = () => {
 
   const menuItems = [
     { id: 'overview', icon: Home, label: 'Clinical Overview', path: '/doctor-dashboard', color: '#0F766E' },
+    { id: 'approvals', icon: CheckSquare, label: 'Patient Approvals', section: 'approvals', color: '#0F766E' },
     { id: 'requests', icon: FileText, label: 'Consultation Requests', section: 'requests', color: '#0F766E' },
     { id: 'patients', icon: Users, label: 'My Patients', section: 'patients', color: '#0F766E' },
     { id: 'video', icon: Video, label: 'Video Consultations', section: 'video', color: '#0F766E' },
-    { id: 'notifications', icon: Bell, label: 'Notifications', section: 'notifications', color: '#0F766E' },
-    { id: 'availability', icon: ToggleLeft, label: 'Availability Status', section: 'availability', color: '#0F766E' },
     { id: 'profile', icon: User, label: 'Profile', section: 'profile', color: '#0F766E' },
   ];
 

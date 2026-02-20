@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
-import { Navbar as BootstrapNavbar, Nav, Container } from 'react-bootstrap';
-import { FaAmbulance } from 'react-icons/fa';
+import { Navbar as BootstrapNavbar, Nav, Container, Badge } from 'react-bootstrap';
+import { FaAmbulance, FaBell } from 'react-icons/fa';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import '../styles/animations.css';
 
@@ -18,6 +18,7 @@ const pages = [
 const Navbar = ({ onlyModels }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -27,6 +28,26 @@ const Navbar = ({ onlyModels }) => {
 
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  useEffect(() => {
+    const fetchNotifications = async () => {
+      try {
+        const res = await fetch('http://localhost:5000/api/notifications', {
+          credentials: 'include'
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setUnreadCount(data.unread_count || 0);
+        }
+      } catch (err) {
+        console.error('Failed to fetch notifications');
+      }
+    };
+
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   const toggleMobileMenu = () => {
@@ -109,6 +130,47 @@ const Navbar = ({ onlyModels }) => {
           </Nav>
           
           <Nav className="ms-auto">
+            <Nav.Link
+              as={RouterLink}
+              to="/patient-dashboard"
+              className="d-flex align-items-center justify-content-center position-relative"
+              style={{
+                width: '50px',
+                height: '50px',
+                borderRadius: '50%',
+                background: unreadCount > 0 ? 'linear-gradient(135deg, #4CAF50 0%, #45a049 100%)' : 'rgba(255,255,255,0.1)',
+                transition: 'all 0.3s ease',
+                marginRight: '10px'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'scale(1.1)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'scale(1)';
+              }}
+              title="Notifications"
+            >
+              <FaBell style={{ color: 'white', fontSize: '1.3rem' }} />
+              {unreadCount > 0 && (
+                <Badge 
+                  bg="danger" 
+                  pill 
+                  style={{
+                    position: 'absolute',
+                    top: '5px',
+                    right: '5px',
+                    fontSize: '0.7rem',
+                    minWidth: '18px',
+                    height: '18px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </Badge>
+              )}
+            </Nav.Link>
             <Nav.Link
               as={RouterLink}
               to="/emergency"

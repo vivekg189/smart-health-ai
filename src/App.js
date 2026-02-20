@@ -56,8 +56,9 @@ function AppContent() {
                      location.pathname.startsWith('/liver') || 
                      location.pathname.startsWith('/kidney') || 
                      location.pathname.startsWith('/bone') ||
-                     location.pathname.startsWith('/symptom-checker');
-  const hideFooter = hideNavbar || location.pathname.startsWith('/symptom-checker');
+                     location.pathname.startsWith('/symptom-checker') ||
+                     location.pathname.startsWith('/cardiovascular-multimodal');
+  const hideFooter = true; // Footer always hidden
   const isSymptomChecker = location.pathname.startsWith('/symptom-checker');
 
   return (
@@ -110,7 +111,7 @@ function AppContent() {
           <Route path="/contact" element={<Container className="py-4"><ContactAnimated /></Container>} />
         </Routes>
       </main>
-      {!hideFooter && <Footer />}
+      {/* Footer removed */}
       <Chatbot />
     </div>
   );

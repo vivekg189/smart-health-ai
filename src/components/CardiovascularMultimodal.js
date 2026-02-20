@@ -147,8 +147,8 @@ const CardiovascularMultimodal = () => {
           {/* Image Upload Section */}
           <Card sx={{ mb: 3, bgcolor: '#fce4ec' }}>
             <CardContent>
-              <Typography variant="h6" gutterBottom>
-                📸 Upload Heart Medical Image (Optional)
+              <Typography variant="h6" gutterBottom sx={{ textAlign: 'center' }}>
+                📸 Upload Heart Medical Image
               </Typography>
               <input
                 accept="image/jpeg,image/jpg,image/png"
@@ -157,19 +157,16 @@ const CardiovascularMultimodal = () => {
                 type="file"
                 onChange={handleImageUpload}
               />
-              <label htmlFor="image-upload">
-                <UploadBox>
-                  <CloudUploadIcon sx={{ fontSize: 48, color: '#e91e63', mb: 1 }} />
-                  <Typography variant="body1">
-                    {imageFile ? imageFile.name : 'Click to upload heart image (JPG, PNG) - Optional'}
-                  </Typography>
-                </UploadBox>
-              </label>
-              {imagePreview && (
-                <Box sx={{ mt: 2, textAlign: 'center' }}>
-                  <img src={imagePreview} alt="Preview" style={{ maxWidth: '200px', borderRadius: '8px' }} />
-                </Box>
-              )}
+              <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                <label htmlFor="image-upload" style={{ width: '100%', maxWidth: '600px' }}>
+                  <UploadBox>
+                    <CloudUploadIcon sx={{ fontSize: 48, color: '#e91e63', mb: 1 }} />
+                    <Typography variant="body1">
+                      {imageFile ? imageFile.name : 'Click to upload heart image (JPG, PNG) - Optional'}
+                    </Typography>
+                  </UploadBox>
+                </label>
+              </Box>
             </CardContent>
           </Card>
 
