@@ -49,23 +49,23 @@ def save_prediction():
 def get_predictions():
     try:
         user_id = session.get('user_id')
-        predictions = db.session.query(
-            Prediction.id,
-            Prediction.disease_type,
-            Prediction.prediction_result,
-            Prediction.probability,
-            Prediction.risk_level,
-            Prediction.created_at
-        ).filter_by(user_id=user_id).order_by(Prediction.created_at.desc()).all()
+        predictions = Prediction.query.filter_by(user_id=user_id).order_by(Prediction.created_at.desc()).all()
         
         return jsonify({
             'predictions': [{
-                'id': p.id,
+                'id': str(p.id),
                 'disease_type': p.disease_type,
                 'prediction_result': p.prediction_result,
                 'probability': p.probability,
                 'risk_level': p.risk_level,
-                'created_at': p.created_at.isoformat()
+                'input_data': p.input_data,
+                'created_at': p.created_at.isoformat(),
+                'status': getattr(p, 'status', 'pending_review'),
+                'doctor_remarks': getattr(p, 'doctor_remarks', None),
+                'reviewed_by': getattr(p, 'reviewed_by', None),
+                'reviewed_at': p.reviewed_at.isoformat() if hasattr(p, 'reviewed_at') and p.reviewed_at else None,
+                'approval_action': getattr(p, 'approval_action', None),
+                'modified_prediction': getattr(p, 'modified_prediction', None)
             } for p in predictions]
         }), 200
         

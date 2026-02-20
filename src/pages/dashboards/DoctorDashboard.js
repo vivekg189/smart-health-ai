@@ -55,6 +55,9 @@ const DoctorDashboard = () => {
   const [showPrescriptionForm, setShowPrescriptionForm] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState(null);
   const [activeSection, setActiveSection] = useState('overview');
+  const [pendingApprovals, setPendingApprovals] = useState([]);
+  const [selectedReport, setSelectedReport] = useState(null);
+  const [showReportDialog, setShowReportDialog] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [showRecordDialog, setShowRecordDialog] = useState(false);
   const [showTreatmentDialog, setShowTreatmentDialog] = useState(false);
@@ -74,9 +77,23 @@ const DoctorDashboard = () => {
   });
 
   useEffect(() => {
-    fetchAppointments();
-    fetchDoctorProfile();
-    fetchPatients();
+    fetch('http://localhost:5000/api/auth/me', { credentials: 'include' })
+      .then(res => res.json())
+      .then(data => {
+        if (!data.user || data.user.role !== 'doctor') {
+          alert('Please login as a doctor to access this page');
+          window.location.href = '/login';
+          return;
+        }
+        fetchAppointments();
+        fetchDoctorProfile();
+        fetchPatients();
+        fetchPendingApprovals();
+      })
+      .catch(() => {
+        alert('Please login to continue');
+        window.location.href = '/login';
+      });
     const interval = setInterval(fetchAppointments, 30000);
     
     const handleSectionChange = (e) => {
@@ -144,6 +161,84 @@ const DoctorDashboard = () => {
       }
     } catch (err) {
       console.error('Error fetching patients:', err);
+    }
+  };
+
+  const fetchPendingApprovals = async () => {
+    try {
+      console.log('🔍 Fetching pending approvals...');
+      const response = await fetch('http://localhost:5000/api/doctor/pending-approvals', { 
+        credentials: 'include' 
+      });
+      
+      console.log('📡 Response status:', response.status);
+      
+      if (response.status === 401) {
+        console.error('❌ Unauthorized - Not logged in as doctor');
+        setError('Please log in as a doctor to view approvals');
+        return;
+      }
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ Received data:', data);
+        console.log('📊 Number of predictions:', data.predictions?.length || 0);
+        
+        if (data.predictions && data.predictions.length > 0) {
+          console.log('📋 First prediction sample:', data.predictions[0]);
+        }
+        
+        setPendingApprovals(data.predictions || []);
+      } else {
+        console.error('❌ Failed to fetch approvals. Status:', response.status);
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Error details:', errorData);
+      }
+    } catch (err) {
+      console.error('❌ Error fetching approvals:', err);
+      setError('Failed to load pending approvals');
+    }
+  };
+
+  const handleApproval = async (predictionId, action, remarks, modifiedData = null) => {
+    try {
+      console.log(`🔄 Starting approval: ID=${predictionId}, action=${action}`);
+      const url = `http://localhost:5000/api/doctor/approve-prediction/${predictionId}`;
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        credentials: 'include',
+        body: JSON.stringify({ action, remarks, modified_prediction: modifiedData })
+      });
+      
+      console.log(`📡 Response: ${response.status} ${response.statusText}`);
+      
+      if (response.status === 401) {
+        alert('Session expired. Please login again as doctor.');
+        window.location.href = '/login';
+        return;
+      }
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('❌ Failed:', response.status, errorData);
+        alert(`Failed: ${errorData.error}`);
+        return;
+      }
+      
+      const data = await response.json();
+      console.log('✅ Success:', data);
+      alert(`Successfully ${action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : 'modified'} the prediction!`);
+      await fetchPendingApprovals();
+      setShowReportDialog(false);
+      setSelectedReport(null);
+    } catch (err) {
+      console.error('❌ Network error:', err);
+      alert(`Network error: ${err.message}`);
     }
   };
 
@@ -317,11 +412,22 @@ const DoctorDashboard = () => {
                 A quick snapshot of today&apos;s workload and follow‑ups.
               </Typography>
             </Box>
-            {pendingCount > 0 && (
-              <Badge badgeContent={pendingCount} color="error">
-                <Notifications fontSize="large" />
-              </Badge>
-            )}
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              {pendingApprovals.length > 0 && (
+                <IconButton onClick={() => setActiveSection('approvals')} sx={{ color: '#0f172a' }}>
+                  <Badge badgeContent={pendingApprovals.length} color="secondary">
+                    <Assignment fontSize="large" />
+                  </Badge>
+                </IconButton>
+              )}
+              {pendingCount > 0 && (
+                <IconButton onClick={() => setActiveSection('requests')} sx={{ color: '#0f172a' }}>
+                  <Badge badgeContent={pendingCount} color="error">
+                    <Notifications fontSize="large" />
+                  </Badge>
+                </IconButton>
+              )}
+            </Box>
           </Box>
 
           <Grid container spacing={3} sx={{ mb: 4 }}>
@@ -452,6 +558,14 @@ const DoctorDashboard = () => {
                       variant="outlined"
                       size="small"
                       sx={{ borderRadius: 999 }}
+                      onClick={() => window.dispatchEvent(new CustomEvent('doctorSectionChange', { detail: 'approvals' }))}
+                    >
+                      Patient Approvals
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      sx={{ borderRadius: 999 }}
                       onClick={() => window.dispatchEvent(new CustomEvent('doctorSectionChange', { detail: 'profile' }))}
                     >
                       Edit Profile
@@ -472,6 +586,7 @@ const DoctorDashboard = () => {
              activeSection === 'video' ? 'Video Consultations' :
              activeSection === 'notifications' ? 'Notifications' :
              activeSection === 'availability' ? 'Availability Status' :
+             activeSection === 'approvals' ? 'Patient Approvals' :
              activeSection === 'profile' ? 'Profile' : ''}
           </Typography>
         </Box>
@@ -936,97 +1051,151 @@ const DoctorDashboard = () => {
         </>
       )}
 
-      {activeSection === 'patient-details' && selectedPatient && (
-        <>
-          <Button onClick={() => setActiveSection('patients')} sx={{ mb: 2 }}>← Back to Patients</Button>
-          <Typography variant="h4" fontWeight={700} gutterBottom>{selectedPatient.name}</Typography>
-          
-          <Grid container spacing={3} sx={{ mt: 2 }}>
-            <Grid item xs={12} md={6}>
-              <StyledCard>
-                <CardContent>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-                    <Typography variant="h6" fontWeight={600}>Medical Records</Typography>
-                    <IconButton color="primary" onClick={() => setShowRecordDialog(true)}><Add /></IconButton>
-                  </Box>
-                  <TableContainer>
-                    <Table size="small">
-                      <TableHead>
-                        <TableRow>
-                          <TableCell>Type</TableCell>
-                          <TableCell>Diagnosis</TableCell>
-                          <TableCell>Date</TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {patientRecords.map((record) => (
-                          <TableRow key={record.id}>
-                            <TableCell>{record.record_type}</TableCell>
-                            <TableCell>{record.diagnosis}</TableCell>
-                            <TableCell>{new Date(record.created_at).toLocaleDateString()}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
-                </CardContent>
-              </StyledCard>
-            </Grid>
-
-            <Grid item xs={12} md={6}>
-              <StyledCard>
-                <CardContent>
-                  <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>Health Analytics</Typography>
-                  {patientAnalytics && (
-                    <>
-                      <Typography variant="body2">Total Predictions: {patientAnalytics.total_predictions}</Typography>
-                      <Box sx={{ mt: 2 }}>
-                        <Typography variant="subtitle2">Risk Distribution:</Typography>
-                        {Object.entries(patientAnalytics.risk_distribution).map(([risk, count]) => (
-                          <Chip key={risk} label={`${risk}: ${count}`} size="small" sx={{ mr: 1, mt: 1 }} />
-                        ))}
-                      </Box>
-                    </>
-                  )}
-                </CardContent>
-              </StyledCard>
-            </Grid>
-
-            <Grid item xs={12}>
-              <StyledCard>
-                <CardContent>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-                    <Typography variant="h6" fontWeight={600}>Treatment History</Typography>
-                    <IconButton color="primary" onClick={() => setShowTreatmentDialog(true)}><Add /></IconButton>
-                  </Box>
-                  <TableContainer>
-                    <Table>
-                      <TableHead>
-                        <TableRow>
-                          <TableCell>Type</TableCell>
-                          <TableCell>Description</TableCell>
-                          <TableCell>Outcome</TableCell>
-                          <TableCell>Date</TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {treatmentHistory.map((treatment) => (
-                          <TableRow key={treatment.id}>
-                            <TableCell>{treatment.treatment_type}</TableCell>
-                            <TableCell>{treatment.description}</TableCell>
-                            <TableCell>{treatment.outcome}</TableCell>
-                            <TableCell>{new Date(treatment.created_at).toLocaleDateString()}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
-                </CardContent>
-              </StyledCard>
-            </Grid>
+      {activeSection === 'approvals' && (
+        <Grid container spacing={3}>
+          <Grid item xs={12}>
+            <Alert severity="info" sx={{ mb: 2 }}>
+              <Typography variant="body2">
+                <strong>Loaded {pendingApprovals.length} predictions.</strong> Check browser console for details.
+              </Typography>
+            </Alert>
           </Grid>
-        </>
+          {pendingApprovals.length === 0 ? (
+            <Grid item xs={12}>
+              <Alert severity="warning">No predictions found. Submit a symptom check as a patient first.</Alert>
+            </Grid>
+          ) : (
+            pendingApprovals.map((pred) => (
+              <Grid item xs={12} key={pred.id}>
+                <StyledCard>
+                  <CardContent sx={{ p: 3 }}>
+                    <Grid container spacing={3}>
+                      <Grid item xs={12} md={8}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                          <LocalHospital sx={{ fontSize: 40, color: '#00897B', mr: 2 }} />
+                          <Box>
+                            <Typography variant="h5" fontWeight={700}>{pred.disease_type}</Typography>
+                            <Typography variant="body2" color="textSecondary">
+                              Patient: {pred.patient_name} | Submitted: {new Date(pred.created_at).toLocaleString()}
+                            </Typography>
+                          </Box>
+                        </Box>
+                        <Divider sx={{ my: 2 }} />
+                        
+                        {pred.input_data?.symptoms && (
+                          <Box sx={{ mb: 2 }}>
+                            <Typography variant="subtitle2" fontWeight={600}>Symptoms:</Typography>
+                            <Typography variant="body2">{pred.input_data.symptoms}</Typography>
+                          </Box>
+                        )}
+                        
+                        {pred.input_data?.duration && (
+                          <Box sx={{ mb: 2 }}>
+                            <Typography variant="subtitle2" fontWeight={600}>Duration:</Typography>
+                            <Typography variant="body2">{pred.input_data.duration}</Typography>
+                          </Box>
+                        )}
+                        
+                        {pred.input_data?.severity && (
+                          <Box sx={{ mb: 2 }}>
+                            <Typography variant="subtitle2" fontWeight={600}>Severity:</Typography>
+                            <Chip label={pred.input_data.severity} size="small" color={pred.input_data.severity === 'Severe' ? 'error' : 'warning'} />
+                          </Box>
+                        )}
+                        
+                        <Box sx={{ mb: 2 }}>
+                          <Typography variant="subtitle2" fontWeight={600}>AI Prediction:</Typography>
+                          <Typography variant="body2">Disease: {pred.disease_type}</Typography>
+                          <Typography variant="body2">Risk Level: {pred.risk_level}</Typography>
+                          <Typography variant="body2">Confidence: {(pred.probability * 100).toFixed(1)}%</Typography>
+                        </Box>
+                      </Grid>
+                      
+                      <Grid item xs={12} md={4}>
+                        <Paper sx={{ p: 2, bgcolor: '#f9fafb', height: '100%' }}>
+                          <Typography variant="h6" fontWeight={600} gutterBottom>Review Actions</Typography>
+                          
+                          {pred.status === 'clinically_verified' && (
+                            <Alert severity="success" sx={{ mb: 2 }}>
+                              <Typography variant="body2" fontWeight={600}>
+                                ✅ Clinically Approved
+                              </Typography>
+                              {pred.doctor_remarks && (
+                                <Typography variant="caption" display="block" sx={{ mt: 1 }}>
+                                  Remarks: {pred.doctor_remarks}
+                                </Typography>
+                              )}
+                            </Alert>
+                          )}
+                          
+                          {pred.status === 'rejected_reeval_required' && (
+                            <Alert severity="error" sx={{ mb: 2 }}>
+                              <Typography variant="body2" fontWeight={600}>
+                                ❌ Rejected
+                              </Typography>
+                              {pred.doctor_remarks && (
+                                <Typography variant="caption" display="block" sx={{ mt: 1 }}>
+                                  Remarks: {pred.doctor_remarks}
+                                </Typography>
+                              )}
+                            </Alert>
+                          )}
+                          
+                          {pred.status === 'modified_by_doctor' && (
+                            <Alert severity="info" sx={{ mb: 2 }}>
+                              <Typography variant="body2" fontWeight={600}>
+                                📝 Modified by Doctor
+                              </Typography>
+                              {pred.doctor_remarks && (
+                                <Typography variant="caption" display="block" sx={{ mt: 1 }}>
+                                  Remarks: {pred.doctor_remarks}
+                                </Typography>
+                              )}
+                            </Alert>
+                          )}
+                          
+                          {pred.status === 'pending_review' && (
+                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                              <Button 
+                                variant="contained" 
+                                color="success" 
+                                startIcon={<CheckCircle />} 
+                                onClick={() => handleApproval(pred.id, 'approve', 'Clinically verified')} 
+                                fullWidth
+                              >
+                                Approve
+                              </Button>
+                              <Button 
+                                variant="outlined" 
+                                color="primary" 
+                                startIcon={<Description />} 
+                                onClick={() => { setSelectedReport(pred); setShowReportDialog(true); }} 
+                                fullWidth
+                              >
+                                Review & Modify
+                              </Button>
+                              <Button 
+                                variant="outlined" 
+                                color="error" 
+                                startIcon={<Cancel />} 
+                                onClick={() => handleApproval(pred.id, 'reject', 'Re-evaluation required')} 
+                                fullWidth
+                              >
+                                Reject
+                              </Button>
+                            </Box>
+                          )}
+                        </Paper>
+                      </Grid>
+                    </Grid>
+                  </CardContent>
+                </StyledCard>
+              </Grid>
+            ))
+          )}
+        </Grid>
       )}
+
 
       <Dialog open={showRecordDialog} onClose={() => setShowRecordDialog(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Add Medical Record</DialogTitle>
@@ -1057,6 +1226,27 @@ const DoctorDashboard = () => {
         <DialogActions>
           <Button onClick={() => setShowTreatmentDialog(false)}>Cancel</Button>
           <Button onClick={handleAddTreatment} variant="contained">Add Treatment</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={showReportDialog} onClose={() => setShowReportDialog(false)} maxWidth="md" fullWidth>
+        <DialogTitle>Review & Modify Assessment</DialogTitle>
+        <DialogContent>
+          {selectedReport && (
+            <Box sx={{ mt: 2 }}>
+              <TextField label="Doctor's Remarks" fullWidth multiline rows={4} placeholder="Add your clinical observations..." sx={{ mb: 2 }} />
+              <TextField label="Modified Risk Level" select fullWidth sx={{ mb: 2 }} defaultValue={selectedReport.risk_level}>
+                <MenuItem value="Low">Low</MenuItem>
+                <MenuItem value="Moderate">Moderate</MenuItem>
+                <MenuItem value="High">High</MenuItem>
+                <MenuItem value="Very High">Very High</MenuItem>
+              </TextField>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowReportDialog(false)}>Cancel</Button>
+          <Button onClick={() => handleApproval(selectedReport?.id, 'modify', 'Modified by doctor')} variant="contained">Save & Approve</Button>
         </DialogActions>
       </Dialog>
       </Container>

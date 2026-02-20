@@ -30,6 +30,13 @@ class Prediction(db.Model):
     probability = db.Column(db.Float)
     risk_level = db.Column(db.String(50))
     input_data = db.Column(db.JSON)
+    original_prediction = db.Column(db.JSON)
+    status = db.Column(db.String(50), default='pending_review')
+    reviewed_by = db.Column(db.Integer, db.ForeignKey('users.id'))
+    reviewed_at = db.Column(db.DateTime)
+    doctor_remarks = db.Column(db.Text)
+    approval_action = db.Column(db.String(50))
+    modified_prediction = db.Column(db.JSON)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
 
 class DoctorAvailability(db.Model):

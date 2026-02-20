@@ -56,10 +56,12 @@ logging.getLogger('httpx').setLevel(logging.WARNING)
 app = Flask(__name__)
 CORS(
     app,
+    resources={r"/api/*": {"origins": "http://localhost:3000"}},
     supports_credentials=True,
-    origins=['http://localhost:3000', 'http://localhost:3001'],
-    methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allow_headers=['Content-Type', 'Authorization']
+    methods=['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allow_headers=['Content-Type', 'Authorization'],
+    expose_headers=['Content-Type'],
+    max_age=3600
 )
 
 app.config['SESSION_TYPE'] = 'filesystem'
@@ -2573,17 +2575,30 @@ Risk: High (>70%), Moderate (50-70%), Low (<50%)."""
                     try:
                         pred = Prediction(
                             user_id=session['user_id'],
-                            disease_type='symptom_check',
-                            prediction_result=predictions[0]['disease'],
-                            probability=predictions[0]['confidence'],
+                            disease_type=predictions[0]['disease'],
+                            prediction_result=predictions[0]['risk'],
+                            probability=predictions[0]['confidence'] / 100,
                             risk_level=predictions[0]['risk'],
                             input_data={
                                 'symptoms': symptoms,
                                 'duration': duration,
-                                'severity': severity,
+                                'severity': severity
+                            },
+                            original_prediction={
+                                'symptom_comparison': result.get('symptom_comparison', {}),
+                                'severity_change': result.get('severity_change', 'New Condition'),
+                                'chief_complaint': symptoms,
+                                'top_prediction': {
+                                    'disease': predictions[0]['disease'],
+                                    'risk': predictions[0]['risk'],
+                                    'confidence': predictions[0]['confidence'],
+                                    'next_step': 'Schedule a clinical consultation and share this report with your doctor for confirmation.',
+                                    'explanation': predictions[0].get('explanation', '')
+                                },
                                 'other_conditions': predictions[1:3] if len(predictions) > 1 else [],
-                                'comparison': result.get('symptom_comparison', {})
-                            }
+                                'recommended_steps': result.get('recommended_steps', [])
+                            },
+                            status='pending_review'
                         )
                         db.session.add(pred)
                         db.session.commit()

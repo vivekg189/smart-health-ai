@@ -125,6 +125,7 @@ const PatientDashboard = () => {
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [privacyMode, setPrivacyMode] = useState(true);
   const [briefCopied, setBriefCopied] = useState(false);
+  const [reportModal, setReportModal] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -132,7 +133,16 @@ const PatientDashboard = () => {
     fetchUserProfile();
     fetchPredictions();
     fetchDoctors();
-  }, []);
+    
+    // Refresh predictions every 10 seconds when on approval tab
+    const interval = setInterval(() => {
+      if (activeTab === 'approval') {
+        fetchPredictions();
+      }
+    }, 10000);
+    
+    return () => clearInterval(interval);
+  }, [activeTab]);
 
   const fetchUserProfile = async () => {
     try {
@@ -167,15 +177,20 @@ const PatientDashboard = () => {
 
   const fetchPredictions = async () => {
     try {
+      console.log('🔍 Fetching predictions...');
       const response = await fetch('http://localhost:5000/api/data/predictions', {
         credentials: 'include'
       });
       if (response.ok) {
         const data = await response.json();
+        console.log('✅ Predictions fetched:', data.predictions?.length || 0);
+        console.log('📊 Sample prediction:', data.predictions?.[0]);
         setPredictions(data.predictions || []);
+      } else {
+        console.error('❌ Failed to fetch predictions:', response.status);
       }
     } catch (err) {
-      console.error('Error fetching predictions:', err);
+      console.error('❌ Error fetching predictions:', err);
     }
   };
 
@@ -619,6 +634,7 @@ const PatientDashboard = () => {
               <Tab value="overview" label="Overview" />
               <Tab value="appointments" label="My Appointments" />
               <Tab value="doctors" label="Meet My Doctors" />
+              <Tab value="approval" label="Doctor Approval" />
               <Tab value="history" label="Health History" />
             </Tabs>
           </CardContent>
@@ -1541,6 +1557,334 @@ const PatientDashboard = () => {
             </Grid>
           )}
 
+          {activeTab === 'approval' && (
+            <Grid container spacing={3}>
+              <Grid item xs={12}>
+                <GlassCard>
+                  <CardContent sx={{ p: 3 }}>
+                    <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 3 }}>
+                      <Box sx={{
+                        width: 48,
+                        height: 48,
+                        borderRadius: 2,
+                        bgcolor: 'rgba(139, 92, 246, 0.12)',
+                        border: '1px solid rgba(139, 92, 246, 0.20)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}>
+                        <Stethoscope size={24} color="#8B5CF6" />
+                      </Box>
+                      <Box>
+                        <Typography variant="h5" fontWeight={900}>
+                          Doctor Approval Status
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          AI symptom checker results reviewed by medical professionals
+                        </Typography>
+                      </Box>
+                    </Stack>
+
+                    {predictions.length === 0 ? (
+                      <Alert severity="info" icon={<Activity size={20} />}>
+                        No AI assessments yet. Complete a health screening to see doctor approval status here.
+                      </Alert>
+                    ) : (
+                      <Grid container spacing={3}>
+                        {predictions.map((pred, idx) => (
+                          <Grid item xs={12} key={idx}>
+                            <Paper 
+                              onClick={() => setReportModal(pred)}
+                              sx={{
+                                cursor: 'pointer',
+                                transition: 'all 0.2s',
+                                '&:hover': {
+                                  transform: 'translateY(-2px)',
+                                  boxShadow: '0 8px 24px rgba(0,0,0,0.12)'
+                                }, 
+                              p: 3, 
+                              bgcolor: pred.status === 'clinically_verified' ? '#f0fdf4' : 
+                                       pred.status === 'modified_by_doctor' ? '#eff6ff' : 
+                                       pred.status === 'rejected_reeval_required' ? '#fef2f2' : '#fffbeb',
+                              border: '2px solid',
+                              borderColor: pred.status === 'clinically_verified' ? '#86efac' : 
+                                           pred.status === 'modified_by_doctor' ? '#93c5fd' : 
+                                           pred.status === 'rejected_reeval_required' ? '#fca5a5' : '#fde047',
+                              borderRadius: 2
+                            }}>
+                              <Stack direction={{ xs: 'column', md: 'row' }} spacing={3}>
+                                {/* Left Section - Disease Info */}
+                                <Box sx={{ flex: 1 }}>
+                                  <Stack direction="row" spacing={2} alignItems="flex-start" sx={{ mb: 2 }}>
+                                    <Box sx={{
+                                      width: 56,
+                                      height: 56,
+                                      borderRadius: 2,
+                                      bgcolor: 'white',
+                                      border: '2px solid',
+                                      borderColor: getRiskColor(pred.risk_level),
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center'
+                                    }}>
+                                      <Heart size={28} color={getRiskColor(pred.risk_level)} />
+                                    </Box>
+                                    <Box sx={{ flex: 1 }}>
+                                      <Typography variant="h5" fontWeight={900} gutterBottom>
+                                        {pred.disease_type}
+                                      </Typography>
+                                      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                                        <Chip
+                                          label={`${getStatusBadge(pred.status).icon} ${getStatusBadge(pred.status).label}`}
+                                          color={getStatusBadge(pred.status).color}
+                                          sx={{ fontWeight: 700 }}
+                                        />
+                                        <Chip
+                                          label={pred.risk_level || 'Normal'}
+                                          sx={{
+                                            bgcolor: getRiskColor(pred.risk_level),
+                                            color: 'white',
+                                            fontWeight: 700
+                                          }}
+                                        />
+                                        <Typography variant="caption" color="text.secondary">
+                                          {new Date(pred.created_at).toLocaleString()}
+                                        </Typography>
+                                      </Stack>
+                                    </Box>
+                                  </Stack>
+
+                                  {/* Risk Visualization */}
+                                  <Box sx={{ mb: 2 }}>
+                                    <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+                                      <Typography variant="body2" fontWeight={700}>
+                                        Risk Assessment
+                                      </Typography>
+                                      <Typography variant="h6" fontWeight={900}>
+                                        {getRiskPercentage(pred.risk_level)}%
+                                      </Typography>
+                                    </Stack>
+                                    <LinearProgress
+                                      variant="determinate"
+                                      value={getRiskPercentage(pred.risk_level)}
+                                      sx={{
+                                        height: 12,
+                                        borderRadius: 6,
+                                        bgcolor: 'rgba(0,0,0,0.08)',
+                                        '& .MuiLinearProgress-bar': {
+                                          bgcolor: getRiskColor(pred.risk_level),
+                                          borderRadius: 6
+                                        }
+                                      }}
+                                    />
+                                  </Box>
+
+                                  {/* Input Parameters */}
+                                  {pred.input_data && typeof pred.input_data === 'object' && (
+                                    <Box sx={{ mb: 2 }}>
+                                      <Typography variant="body2" fontWeight={700} gutterBottom>
+                                        Assessment Parameters:
+                                      </Typography>
+                                      <Paper sx={{ p: 2, bgcolor: 'white', border: '1px solid rgba(0,0,0,0.08)' }}>
+                                        <Grid container spacing={1.5}>
+                                          {Object.entries(pred.input_data).filter(([key, value]) => typeof value !== 'object').map(([key, value]) => (
+                                            <Grid item xs={6} sm={4} md={3} key={key}>
+                                              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                                {key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                                              </Typography>
+                                              <Typography variant="body2" fontWeight={700}>
+                                                {typeof value === 'number' ? value.toFixed(2) : String(value)}
+                                              </Typography>
+                                            </Grid>
+                                          ))}
+                                        </Grid>
+                                      </Paper>
+                                    </Box>
+                                  )}
+
+                                  {/* Probability Score */}
+                                </Box>
+
+                                {/* Right Section - Doctor Review */}
+                                <Box sx={{ 
+                                  width: { xs: '100%', md: 380 },
+                                  bgcolor: 'white',
+                                  borderRadius: 2,
+                                  p: 2.5,
+                                  border: '1px solid rgba(0,0,0,0.08)'
+                                }}>
+                                  <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
+                                    <Stethoscope size={20} color="#8B5CF6" />
+                                    <Typography variant="h6" fontWeight={900}>
+                                      Doctor Review
+                                    </Typography>
+                                  </Stack>
+
+                                  {pred.status === 'pending_review' ? (
+                                    <Alert severity="warning" icon={<Clock size={20} />}>
+                                      <Typography variant="body2" fontWeight={600}>
+                                        Awaiting medical review
+                                      </Typography>
+                                      <Typography variant="caption">
+                                        A doctor will review your AI assessment shortly.
+                                      </Typography>
+                                    </Alert>
+                                  ) : (
+                                    <>
+                                      {pred.reviewed_by && (
+                                        <Box sx={{ mb: 2 }}>
+                                          <Typography variant="caption" color="text.secondary">
+                                            Reviewed by:
+                                          </Typography>
+                                          <Typography variant="body2" fontWeight={700}>
+                                            Doctor ID: {pred.reviewed_by}
+                                          </Typography>
+                                          {pred.reviewed_at && (
+                                            <Typography variant="caption" color="text.secondary">
+                                              {new Date(pred.reviewed_at).toLocaleString()}
+                                            </Typography>
+                                          )}
+                                        </Box>
+                                      )}
+
+                                      {pred.doctor_remarks && (
+                                        <Box sx={{ mb: 2 }}>
+                                          <Typography variant="caption" color="text.secondary">
+                                            Doctor's Remarks:
+                                          </Typography>
+                                          <Paper sx={{ p: 1.5, bgcolor: '#f8fafc', mt: 0.5 }}>
+                                            <Typography variant="body2">
+                                              {pred.doctor_remarks}
+                                            </Typography>
+                                          </Paper>
+                                        </Box>
+                                      )}
+
+                                      {pred.approval_action && (
+                                        <Box sx={{ mb: 2 }}>
+                                          <Typography variant="caption" color="text.secondary">
+                                            Action Taken:
+                                          </Typography>
+                                          <Chip
+                                            label={pred.approval_action.replace(/_/g, ' ').toUpperCase()}
+                                            size="small"
+                                            sx={{ mt: 0.5, fontWeight: 700 }}
+                                          />
+                                        </Box>
+                                      )}
+
+                                      {pred.modified_prediction && (
+                                        <Box sx={{ mb: 2 }}>
+                                          <Alert severity="info" icon={<Info size={18} />}>
+                                            <Typography variant="caption" fontWeight={700}>
+                                              Modified Assessment
+                                            </Typography>
+                                            <Typography variant="body2" sx={{ mt: 0.5 }}>
+                                              {pred.modified_prediction.risk_level && (
+                                                <span>New Risk: <strong>{pred.modified_prediction.risk_level}</strong></span>
+                                              )}
+                                            </Typography>
+                                          </Alert>
+                                        </Box>
+                                      )}
+                                    </>
+                                  )}
+
+                                  {/* Action Buttons */}
+                                  <Stack spacing={1} sx={{ mt: 2 }}>
+                                    {pred.status === 'clinically_verified' && (
+                                      <Button
+                                        variant="contained"
+                                        startIcon={<Activity size={18} />}
+                                        onClick={() => navigate('/hospital-finder')}
+                                        sx={{ bgcolor: '#10b981', '&:hover': { bgcolor: '#059669' } }}
+                                      >
+                                        Find Nearby Hospitals
+                                      </Button>
+                                    )}
+                                    {pred.status === 'rejected_reeval_required' && (
+                                      <Button
+                                        variant="contained"
+                                        color="error"
+                                        startIcon={<Video size={18} />}
+                                        onClick={() => navigate('/meet-doctor')}
+                                      >
+                                        Book Urgent Consultation
+                                      </Button>
+                                    )}
+                                    {(pred.status === 'modified_by_doctor' || pred.status === 'clinically_verified') && (
+                                      <Button
+                                        variant="outlined"
+                                        startIcon={<FileText size={18} />}
+                                        onClick={() => navigate('/meet-doctor')}
+                                      >
+                                        Schedule Follow-up
+                                      </Button>
+                                    )}
+                                  </Stack>
+                                </Box>
+                              </Stack>
+                            </Paper>
+                          </Grid>
+                        ))}
+                      </Grid>
+                    )}
+                  </CardContent>
+                </GlassCard>
+              </Grid>
+
+              {/* Summary Cards */}
+              <Grid item xs={12} md={3}>
+                <StyledCard>
+                  <CardContent>
+                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                      Total Assessments
+                    </Typography>
+                    <Typography variant="h4" fontWeight={900}>
+                      {predictions.length}
+                    </Typography>
+                  </CardContent>
+                </StyledCard>
+              </Grid>
+              <Grid item xs={12} md={3}>
+                <StyledCard>
+                  <CardContent>
+                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                      Approved
+                    </Typography>
+                    <Typography variant="h4" fontWeight={900} sx={{ color: '#10b981' }}>
+                      {predictions.filter(p => p.status === 'clinically_verified').length}
+                    </Typography>
+                  </CardContent>
+                </StyledCard>
+              </Grid>
+              <Grid item xs={12} md={3}>
+                <StyledCard>
+                  <CardContent>
+                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                      Pending Review
+                    </Typography>
+                    <Typography variant="h4" fontWeight={900} sx={{ color: '#f59e0b' }}>
+                      {predictions.filter(p => p.status === 'pending_review').length}
+                    </Typography>
+                  </CardContent>
+                </StyledCard>
+              </Grid>
+              <Grid item xs={12} md={3}>
+                <StyledCard>
+                  <CardContent>
+                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                      Modified
+                    </Typography>
+                    <Typography variant="h4" fontWeight={900} sx={{ color: '#3b82f6' }}>
+                      {predictions.filter(p => p.status === 'modified_by_doctor').length}
+                    </Typography>
+                  </CardContent>
+                </StyledCard>
+              </Grid>
+            </Grid>
+          )}
+
           {activeTab === 'history' && (
             <Grid container spacing={3}>
               <Grid item xs={12}>
@@ -1564,7 +1908,7 @@ const PatientDashboard = () => {
                           Health History Timeline
                         </Typography>
                         <Typography variant="body2" color="text.secondary">
-                          Complete record of your health assessments and consultations
+                          Complete record of your health assessments and consultations - Click any item for full details
                         </Typography>
                       </Box>
                     </Stack>
@@ -1606,9 +1950,23 @@ const PatientDashboard = () => {
                                 boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
                               }} />
 
-                              <Paper sx={{ p: 2.5, bgcolor: item.type === 'prediction' ? '#f0fdfa' : '#eff6ff', border: '1px solid', borderColor: item.type === 'prediction' ? 'rgba(77, 182, 172, 0.2)' : 'rgba(14, 165, 233, 0.2)' }}>
+                              <Paper 
+                                onClick={() => item.type === 'prediction' ? setReportModal(item) : viewPrescription(item.id)}
+                                sx={{ 
+                                  p: 2.5, 
+                                  bgcolor: item.type === 'prediction' ? '#f0fdfa' : '#eff6ff', 
+                                  border: '1px solid', 
+                                  borderColor: item.type === 'prediction' ? 'rgba(77, 182, 172, 0.2)' : 'rgba(14, 165, 233, 0.2)',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.2s',
+                                  '&:hover': {
+                                    transform: 'translateX(8px)',
+                                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                                    borderColor: item.type === 'prediction' ? '#4DB6AC' : '#0EA5E9'
+                                  }
+                                }}>
                                 <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 1.5 }}>
-                                  <Box>
+                                  <Box sx={{ flex: 1 }}>
                                     <Typography variant="h6" fontWeight={700}>
                                       {item.type === 'prediction' ? `${item.disease_type} Assessment` : `Consultation with Dr. ${item.doctor_name}`}
                                     </Typography>
@@ -1616,20 +1974,34 @@ const PatientDashboard = () => {
                                       {new Date(item.date).toLocaleString()}
                                     </Typography>
                                   </Box>
-                                  <Chip
-                                    label={item.type === 'prediction' ? 'Assessment' : item.status}
-                                    size="small"
-                                    sx={{
-                                      fontWeight: 700,
-                                      bgcolor: item.type === 'prediction' ? '#4DB6AC' : item.status === 'completed' ? '#10b981' : item.status === 'accepted' ? '#3b82f6' : '#f59e0b',
-                                      color: 'white'
-                                    }}
-                                  />
+                                  <Stack direction="row" spacing={1} alignItems="center">
+                                    <Chip
+                                      label={item.type === 'prediction' ? 'Assessment' : item.status}
+                                      size="small"
+                                      sx={{
+                                        fontWeight: 700,
+                                        bgcolor: item.type === 'prediction' ? '#4DB6AC' : item.status === 'completed' ? '#10b981' : item.status === 'accepted' ? '#3b82f6' : '#f59e0b',
+                                        color: 'white'
+                                      }}
+                                    />
+                                    <Tooltip title="Click to view full details">
+                                      <IconButton size="small" sx={{ bgcolor: 'rgba(0,0,0,0.05)' }}>
+                                        <FileText size={16} />
+                                      </IconButton>
+                                    </Tooltip>
+                                  </Stack>
                                 </Stack>
 
                                 {item.type === 'prediction' ? (
                                   <>
+                                    {/* Risk Assessment */}
                                     <Box sx={{ mb: 2 }}>
+                                      <Stack direction="row" justifyContent="space-between" sx={{ mb: 0.5 }}>
+                                        <Typography variant="caption" fontWeight={700}>Risk Level</Typography>
+                                        <Typography variant="caption" fontWeight={900} sx={{ color: getRiskColor(item.risk_level) }}>
+                                          {getRiskPercentage(item.risk_level)}%
+                                        </Typography>
+                                      </Stack>
                                       <LinearProgress
                                         variant="determinate"
                                         value={getRiskPercentage(item.risk_level)}
@@ -1644,7 +2016,9 @@ const PatientDashboard = () => {
                                         }}
                                       />
                                     </Box>
-                                    <Stack direction="row" spacing={2} alignItems="center">
+
+                                    {/* Status and Details */}
+                                    <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" sx={{ mb: 2 }}>
                                       <Chip
                                         label={`${item.risk_level || 'Normal'} Risk`}
                                         size="small"
@@ -1654,29 +2028,81 @@ const PatientDashboard = () => {
                                           fontWeight: 600
                                         }}
                                       />
-                                      <Typography variant="body2" fontWeight={600}>
-                                        {getRiskPercentage(item.risk_level)}% Risk Level
-                                      </Typography>
+                                      <Chip
+                                        label={getStatusBadge(item.status).label}
+                                        size="small"
+                                        color={getStatusBadge(item.status).color}
+                                        sx={{ fontWeight: 600 }}
+                                      />
+                                      {item.probability && (
+                                        <Chip
+                                          label={`AI: ${(item.probability * 100).toFixed(0)}%`}
+                                          size="small"
+                                          variant="outlined"
+                                          sx={{ fontWeight: 600 }}
+                                        />
+                                      )}
                                     </Stack>
+
+                                    {/* Key Parameters Preview */}
+                                    {item.input_data && typeof item.input_data === 'object' && (
+                                      <Box sx={{ mb: 2 }}>
+                                        <Typography variant="caption" fontWeight={700} color="text.secondary" gutterBottom>
+                                          Key Parameters:
+                                        </Typography>
+                                        <Grid container spacing={1} sx={{ mt: 0.5 }}>
+                                          {Object.entries(item.input_data).filter(([key, value]) => typeof value !== 'object').slice(0, 6).map(([key, value]) => (
+                                            <Grid item xs={4} key={key}>
+                                              <Paper sx={{ p: 1, bgcolor: 'white', border: '1px solid rgba(0,0,0,0.08)' }}>
+                                                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>
+                                                  {key.replace(/_/g, ' ').substring(0, 12)}
+                                                </Typography>
+                                                <Typography variant="body2" fontWeight={700} sx={{ fontSize: '0.8rem' }}>
+                                                  {typeof value === 'number' ? value.toFixed(1) : String(value)}
+                                                </Typography>
+                                              </Paper>
+                                            </Grid>
+                                          ))}
+                                        </Grid>
+                                        {Object.entries(item.input_data).filter(([key, value]) => typeof value !== 'object').length > 6 && (
+                                          <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                                            +{Object.entries(item.input_data).filter(([key, value]) => typeof value !== 'object').length - 6} more parameters (click to view all)
+                                          </Typography>
+                                        )}
+                                      </Box>
+                                    )}
+
+                                    {/* Doctor Review Summary */}
+                                    {item.doctor_remarks && (
+                                      <Alert severity="info" sx={{ mt: 1.5 }}>
+                                        <Typography variant="caption" fontWeight={700}>Doctor's Note:</Typography>
+                                        <Typography variant="body2" sx={{ mt: 0.5 }}>
+                                          {item.doctor_remarks.length > 100 
+                                            ? `${item.doctor_remarks.substring(0, 100)}... (click to read more)` 
+                                            : item.doctor_remarks}
+                                        </Typography>
+                                      </Alert>
+                                    )}
                                   </>
                                 ) : (
                                   <>
                                     <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                                       <strong>Symptoms:</strong> {item.symptoms}
                                     </Typography>
+                                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                                      <strong>Specialization:</strong> {item.doctor_specialization}
+                                    </Typography>
                                     <Typography variant="body2" color="text.secondary">
-                                      <strong>Date:</strong> {new Date(item.appointment_date).toLocaleDateString()} at {item.appointment_time}
+                                      <strong>Scheduled:</strong> {new Date(item.appointment_date).toLocaleDateString()} at {item.appointment_time}
                                     </Typography>
                                     {item.status === 'completed' && (
-                                      <Button
+                                      <Chip
+                                        icon={<FileText size={14} />}
+                                        label="Prescription Available"
                                         size="small"
-                                        variant="outlined"
-                                        startIcon={<FileText size={16} />}
-                                        onClick={() => viewPrescription(item.id)}
-                                        sx={{ mt: 1.5 }}
-                                      >
-                                        View Prescription
-                                      </Button>
+                                        color="success"
+                                        sx={{ mt: 1.5, fontWeight: 700 }}
+                                      />
                                     )}
                                   </>
                                 )}
@@ -1690,38 +2116,62 @@ const PatientDashboard = () => {
               </Grid>
 
               {/* Summary Statistics */}
-              <Grid item xs={12} md={4}>
+              <Grid item xs={12} md={3}>
                 <StyledCard>
                   <CardContent>
-                    <Typography variant="h6" fontWeight={700} gutterBottom>
-                      Total Assessments
-                    </Typography>
+                    <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+                      <Activity size={20} color="#4DB6AC" />
+                      <Typography variant="body2" fontWeight={700} color="text.secondary">
+                        Total Assessments
+                      </Typography>
+                    </Stack>
                     <Typography variant="h3" fontWeight={900} color="primary">
                       {predictions.length}
                     </Typography>
                   </CardContent>
                 </StyledCard>
               </Grid>
-              <Grid item xs={12} md={4}>
+              <Grid item xs={12} md={3}>
                 <StyledCard>
                   <CardContent>
-                    <Typography variant="h6" fontWeight={700} gutterBottom>
-                      Total Consultations
-                    </Typography>
+                    <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+                      <Calendar size={20} color="#0EA5E9" />
+                      <Typography variant="body2" fontWeight={700} color="text.secondary">
+                        Total Consultations
+                      </Typography>
+                    </Stack>
                     <Typography variant="h3" fontWeight={900} color="secondary">
                       {appointments.length}
                     </Typography>
                   </CardContent>
                 </StyledCard>
               </Grid>
-              <Grid item xs={12} md={4}>
+              <Grid item xs={12} md={3}>
                 <StyledCard>
                   <CardContent>
-                    <Typography variant="h6" fontWeight={700} gutterBottom>
-                      Completed Visits
-                    </Typography>
+                    <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+                      <CheckCircle size={20} color="#10b981" />
+                      <Typography variant="body2" fontWeight={700} color="text.secondary">
+                        Completed Visits
+                      </Typography>
+                    </Stack>
                     <Typography variant="h3" fontWeight={900} sx={{ color: '#10b981' }}>
                       {appointments.filter(a => a.status === 'completed').length}
+                    </Typography>
+                  </CardContent>
+                </StyledCard>
+              </Grid>
+              <Grid item xs={12} md={3}>
+                <StyledCard>
+                  <CardContent>
+                    <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+                      <Stethoscope size={20} color="#8B5CF6" />
+                      <Typography variant="body2" fontWeight={700} color="text.secondary">
+                        Doctor Reviewed
+                      </Typography>
+                    </Stack>
+                    <Typography variant="h3" fontWeight={900} sx={{ color: '#8B5CF6' }}>
+                      {predictions.filter(p => p.status !== 'pending_review').length}
                     </Typography>
                   </CardContent>
                 </StyledCard>
@@ -1811,6 +2261,304 @@ const PatientDashboard = () => {
         doctor={selectedDoctor}
         patientName={userName}
       />
+
+      {/* Detailed Report Modal */}
+      <Dialog
+        open={!!reportModal}
+        onClose={() => setReportModal(null)}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            maxHeight: '90vh'
+          }
+        }}
+      >
+        <DialogTitle sx={{ bgcolor: '#4DB6AC', color: 'white', py: 2.5 }}>
+          <Stack direction="row" spacing={2} alignItems="center">
+            <Box sx={{
+              width: 48,
+              height: 48,
+              borderRadius: 2,
+              bgcolor: 'rgba(255,255,255,0.2)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <FileText size={24} color="white" />
+            </Box>
+            <Box>
+              <Typography variant="h5" fontWeight={900}>
+                Detailed Health Assessment Report
+              </Typography>
+              <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.9)' }}>
+                {reportModal?.disease_type} - Complete Analysis
+              </Typography>
+            </Box>
+          </Stack>
+        </DialogTitle>
+        <DialogContent sx={{ p: 3, mt: 2 }}>
+          {reportModal && (
+            <Box>
+              {/* Header Info */}
+              <Paper sx={{ p: 2.5, mb: 3, bgcolor: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="caption" color="text.secondary">Assessment Date</Typography>
+                    <Typography variant="body1" fontWeight={700}>
+                      {new Date(reportModal.created_at).toLocaleString()}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="caption" color="text.secondary">Report ID</Typography>
+                    <Typography variant="body1" fontWeight={700}>
+                      #{reportModal.id}
+                    </Typography>
+                  </Grid>
+                </Grid>
+              </Paper>
+
+              {/* Disease & Risk */}
+              <Box sx={{ mb: 3 }}>
+                <Typography variant="h6" fontWeight={900} gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Heart size={20} color="#4DB6AC" />
+                  Disease Assessment
+                </Typography>
+                <Paper sx={{ p: 2.5, bgcolor: '#f0fdfa', border: '2px solid #99f6e4' }}>
+                  <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
+                    <Typography variant="h5" fontWeight={900}>
+                      {reportModal.disease_type}
+                    </Typography>
+                    <Chip
+                      label={reportModal.risk_level || 'Normal'}
+                      sx={{
+                        bgcolor: getRiskColor(reportModal.risk_level),
+                        color: 'white',
+                        fontWeight: 700,
+                        fontSize: '0.9rem'
+                      }}
+                    />
+                  </Stack>
+                  <Box sx={{ mb: 2 }}>
+                    <Stack direction="row" justifyContent="space-between" sx={{ mb: 1 }}>
+                      <Typography variant="body2" fontWeight={700}>Risk Level</Typography>
+                      <Typography variant="h6" fontWeight={900} sx={{ color: getRiskColor(reportModal.risk_level) }}>
+                        {getRiskPercentage(reportModal.risk_level)}%
+                      </Typography>
+                    </Stack>
+                    <LinearProgress
+                      variant="determinate"
+                      value={getRiskPercentage(reportModal.risk_level)}
+                      sx={{
+                        height: 14,
+                        borderRadius: 7,
+                        bgcolor: 'rgba(0,0,0,0.08)',
+                        '& .MuiLinearProgress-bar': {
+                          bgcolor: getRiskColor(reportModal.risk_level),
+                          borderRadius: 7
+                        }
+                      }}
+                    />
+                  </Box>
+                  {reportModal.probability && (
+                    <Typography variant="body2" color="text.secondary">
+                      AI Confidence: <strong>{(reportModal.probability * 100).toFixed(1)}%</strong>
+                    </Typography>
+                  )}
+                </Paper>
+              </Box>
+
+              {/* Input Parameters */}
+              {reportModal.input_data && typeof reportModal.input_data === 'object' && (
+                <Box sx={{ mb: 3 }}>
+                  <Typography variant="h6" fontWeight={900} gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Activity size={20} color="#4DB6AC" />
+                    Clinical Parameters
+                  </Typography>
+                  <Paper sx={{ p: 2.5, border: '1px solid #e2e8f0' }}>
+                    <Grid container spacing={2}>
+                      {Object.entries(reportModal.input_data).filter(([key, value]) => typeof value !== 'object').map(([key, value]) => (
+                        <Grid item xs={6} sm={4} md={3} key={key}>
+                          <Box sx={{ p: 1.5, bgcolor: '#f8fafc', borderRadius: 1, border: '1px solid #e2e8f0' }}>
+                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                              {key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                            </Typography>
+                            <Typography variant="h6" fontWeight={900}>
+                              {typeof value === 'number' ? value.toFixed(2) : String(value)}
+                            </Typography>
+                          </Box>
+                        </Grid>
+                      ))}
+                    </Grid>
+                  </Paper>
+                </Box>
+              )}
+
+              <Divider sx={{ my: 3 }} />
+
+              {/* Doctor Review Section */}
+              <Box sx={{ mb: 3 }}>
+                <Typography variant="h6" fontWeight={900} gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Stethoscope size={20} color="#8B5CF6" />
+                  Medical Professional Review
+                </Typography>
+                <Paper sx={{ 
+                  p: 2.5, 
+                  bgcolor: reportModal.status === 'pending_review' ? '#fffbeb' : '#f0fdf4',
+                  border: '2px solid',
+                  borderColor: reportModal.status === 'pending_review' ? '#fde047' : '#86efac'
+                }}>
+                  <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
+                    <Chip
+                      label={`${getStatusBadge(reportModal.status).icon} ${getStatusBadge(reportModal.status).label}`}
+                      color={getStatusBadge(reportModal.status).color}
+                      sx={{ fontWeight: 700 }}
+                    />
+                  </Stack>
+
+                  {reportModal.status === 'pending_review' ? (
+                    <Alert severity="warning" icon={<Clock size={20} />}>
+                      <Typography variant="body2" fontWeight={600}>
+                        This assessment is awaiting review by a medical professional.
+                      </Typography>
+                    </Alert>
+                  ) : (
+                    <>
+                      {reportModal.reviewed_by && (
+                        <Box sx={{ mb: 2, p: 2, bgcolor: 'white', borderRadius: 1 }}>
+                          <Typography variant="caption" color="text.secondary">Reviewed By</Typography>
+                          <Typography variant="body1" fontWeight={700}>
+                            Doctor ID: {reportModal.reviewed_by}
+                          </Typography>
+                          {reportModal.reviewed_at && (
+                            <Typography variant="caption" color="text.secondary">
+                              on {new Date(reportModal.reviewed_at).toLocaleString()}
+                            </Typography>
+                          )}
+                        </Box>
+                      )}
+
+                      {reportModal.doctor_remarks && (
+                        <Box sx={{ mb: 2 }}>
+                          <Typography variant="body2" fontWeight={700} gutterBottom>
+                            Doctor's Clinical Remarks:
+                          </Typography>
+                          <Paper sx={{ p: 2, bgcolor: 'white', borderLeft: '4px solid #4DB6AC' }}>
+                            <Typography variant="body1">
+                              {reportModal.doctor_remarks}
+                            </Typography>
+                          </Paper>
+                        </Box>
+                      )}
+
+                      {reportModal.approval_action && (
+                        <Box sx={{ mb: 2 }}>
+                          <Typography variant="body2" fontWeight={700} gutterBottom>
+                            Action Taken:
+                          </Typography>
+                          <Chip
+                            label={reportModal.approval_action.replace(/_/g, ' ').toUpperCase()}
+                            sx={{ fontWeight: 700, bgcolor: '#4DB6AC', color: 'white' }}
+                          />
+                        </Box>
+                      )}
+
+                      {reportModal.modified_prediction && (
+                        <Box sx={{ mb: 2 }}>
+                          <Alert severity="info" icon={<Info size={18} />}>
+                            <Typography variant="body2" fontWeight={700} gutterBottom>
+                              Modified Assessment by Doctor
+                            </Typography>
+                            <Typography variant="body2">
+                              {reportModal.modified_prediction.risk_level && (
+                                <>Updated Risk Level: <strong>{reportModal.modified_prediction.risk_level}</strong></>
+                              )}
+                            </Typography>
+                            {reportModal.modified_prediction.notes && (
+                              <Typography variant="body2" sx={{ mt: 1 }}>
+                                Notes: {reportModal.modified_prediction.notes}
+                              </Typography>
+                            )}
+                          </Alert>
+                        </Box>
+                      )}
+                    </>
+                  )}
+                </Paper>
+              </Box>
+
+              {/* Recommendations */}
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="h6" fontWeight={900} gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <AlertTriangle size={20} color="#f59e0b" />
+                  Recommendations
+                </Typography>
+                <Paper sx={{ p: 2.5, bgcolor: '#fffbeb', border: '1px solid #fde047' }}>
+                  {reportModal.status === 'clinically_verified' && (
+                    <Alert severity="success" sx={{ mb: 2 }}>
+                      Your assessment has been verified. Consider consulting with a specialist for detailed treatment plan.
+                    </Alert>
+                  )}
+                  {reportModal.status === 'rejected_reeval_required' && (
+                    <Alert severity="error" sx={{ mb: 2 }}>
+                      Re-evaluation required. Please book an urgent consultation with a doctor.
+                    </Alert>
+                  )}
+                  <Typography variant="body2">
+                    • Maintain regular health monitoring<br />
+                    • Follow prescribed lifestyle modifications<br />
+                    • Schedule follow-up assessments as recommended<br />
+                    • Consult healthcare provider for any concerns
+                  </Typography>
+                </Paper>
+              </Box>
+
+              {/* Action Buttons */}
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mt: 3 }}>
+                <Button
+                  variant="contained"
+                  fullWidth
+                  startIcon={<FileText size={18} />}
+                  onClick={() => {
+                    window.print();
+                  }}
+                  sx={{ bgcolor: '#4DB6AC', '&:hover': { bgcolor: '#3aa89f' } }}
+                >
+                  Print Report
+                </Button>
+                {reportModal.status === 'clinically_verified' && (
+                  <Button
+                    variant="outlined"
+                    fullWidth
+                    startIcon={<Activity size={18} />}
+                    onClick={() => {
+                      setReportModal(null);
+                      navigate('/hospital-finder');
+                    }}
+                  >
+                    Find Hospitals
+                  </Button>
+                )}
+                <Button
+                  variant="outlined"
+                  fullWidth
+                  onClick={() => setReportModal(null)}
+                >
+                  Close
+                </Button>
+              </Stack>
+
+              {/* Disclaimer */}
+              <Alert severity="info" icon={<Info size={18} />} sx={{ mt: 3 }}>
+                <Typography variant="caption">
+                  <strong>Medical Disclaimer:</strong> This report is for informational purposes only and does not constitute medical advice. Always consult with qualified healthcare professionals for diagnosis and treatment.
+                </Typography>
+              </Alert>
+            </Box>
+          )}
+        </DialogContent>
+      </Dialog>
       </Container>
     </Box>
   );

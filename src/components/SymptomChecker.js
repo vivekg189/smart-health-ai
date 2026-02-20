@@ -63,6 +63,9 @@ const SymptomChecker = () => {
 
       const data = await response.json();
       setResult(data);
+      
+      // Show success notification
+      console.log('✅ Symptom analysis saved successfully. Your report has been sent to doctors for review.');
     } catch (err) {
       setError(err.message);
     } finally {
@@ -185,6 +188,12 @@ const SymptomChecker = () => {
             </Alert>
           )}
 
+          <Alert severity="success" sx={{ mb: 3 }}>
+            <Typography variant="body2" fontWeight={600}>
+              ✅ Your symptom analysis has been saved and sent to doctors for review. You can track the approval status in your Patient Dashboard.
+            </Typography>
+          </Alert>
+
           {/* Symptom Comparison Card */}
           {result.has_past_history && result.symptom_comparison && (
             <Card sx={{ mb: 3, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', borderRadius: 3, border: '2px solid #0ea5e9' }}>
@@ -203,7 +212,7 @@ const SymptomChecker = () => {
                         Relation Status
                       </Typography>
                       <Chip
-                        label={result.symptom_comparison.relation_status}
+                        label={String(result.symptom_comparison.relation_status || 'Unknown')}
                         sx={{
                           mt: 1,
                           bgcolor: result.symptom_comparison.relation_status === 'Related' ? '#f59e0b' : '#10b981',
@@ -219,7 +228,9 @@ const SymptomChecker = () => {
                         Symptom Overlap
                       </Typography>
                       <Typography variant="h5" fontWeight={800} sx={{ mt: 0.5 }}>
-                        {result.symptom_comparison.overlap_percentage}%
+                        {typeof result.symptom_comparison.overlap_percentage === 'number' 
+                          ? result.symptom_comparison.overlap_percentage 
+                          : String(result.symptom_comparison.overlap_percentage || '0')}%
                       </Typography>
                     </Paper>
                   </Grid>
@@ -227,7 +238,7 @@ const SymptomChecker = () => {
 
                 <Alert severity="info" sx={{ mb: 2 }}>
                   <Typography variant="body2" fontWeight={600}>
-                    {result.symptom_comparison.comparison_summary}
+                    {String(result.symptom_comparison.comparison_summary || 'No comparison summary available')}
                   </Typography>
                 </Alert>
 
@@ -349,11 +360,11 @@ const SymptomChecker = () => {
                         Primary Suspected Condition
                       </Typography>
                       <Typography variant="h6" fontWeight={800}>
-                        {result.top_prediction.disease}
+                        {String(result.top_prediction.disease || 'Unknown')}
                       </Typography>
                     </Box>
                     <Chip
-                      label={result.top_prediction.risk}
+                      label={String(result.top_prediction.risk || 'Unknown')}
                       sx={{
                         bgcolor: getRiskColor(result.top_prediction.risk),
                         color: 'white',
@@ -380,7 +391,9 @@ const SymptomChecker = () => {
                             Model estimate
                           </Typography>
                           <Typography variant="body2" fontWeight={700}>
-                            {result.top_prediction.confidence}%
+                            {typeof result.top_prediction.confidence === 'number' 
+                              ? result.top_prediction.confidence 
+                              : String(result.top_prediction.confidence || '0')}%
                           </Typography>
                         </Box>
                         <LinearProgress
@@ -414,7 +427,7 @@ const SymptomChecker = () => {
                       icon={<CheckCircle size={20} />}
                       sx={{ mt: 2 }}
                     >
-                      {result.top_prediction.explanation}
+                      {String(result.top_prediction.explanation)}
                     </Alert>
                   )}
 
