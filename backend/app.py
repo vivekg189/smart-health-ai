@@ -31,6 +31,7 @@ from appointment_routes import appointment_bp
 from settings_routes import settings_bp
 from health_analytics import analytics_bp
 from doctor_routes import doctor_bp
+from doctor_recommendation import doctor_recommendation_bp
 from models import User, DoctorAvailability, db, Prediction
 from cardiovascular_multimodal import predict_cardiovascular, generate_report as generate_cardio_report
 
@@ -83,6 +84,7 @@ app.register_blueprint(appointment_bp, url_prefix='/api/appointments')
 app.register_blueprint(settings_bp)
 app.register_blueprint(analytics_bp, url_prefix='/api/analytics')
 app.register_blueprint(doctor_bp, url_prefix='/api/doctor')
+app.register_blueprint(doctor_recommendation_bp, url_prefix='/api/recommend')
 
 # Initialize EasyOCR reader (load once at startup)
 _ocr_reader = None

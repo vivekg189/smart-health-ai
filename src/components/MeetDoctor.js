@@ -44,14 +44,27 @@ const MeetDoctor = () => {
     availableOnly: false
   });
 
+  const [recommendedDoctor, setRecommendedDoctor] = useState(null);
+  const [showRecommendation, setShowRecommendation] = useState(false);
+
   const specializations = [
     'All',
-    'Cardiologist',
-    'General Physician',
-    'Orthopedic',
-    'Dermatologist',
-    'Neurologist',
-    'Pediatrician'
+    'Cardiology',
+    'Diabetes',
+    'Endocrinology',
+    'ENT',
+    'General Medicine',
+    'General Surgery',
+    'Gynaecology',
+    'Infertility',
+    'Maternity',
+    'Neurology',
+    'Neurosurgery',
+    'Ophthalmology',
+    'Orthopaedics',
+    'Paediatrics',
+    'Paediatric Surgery',
+    'Urology'
   ];
 
   useEffect(() => {
@@ -98,10 +111,11 @@ const MeetDoctor = () => {
       setLoading(true);
       const params = new URLSearchParams({
         lat: userLocation.lat,
-        lon: userLocation.lon
+        lon: userLocation.lon,
+        specialty: filters.specialization || 'All'
       });
 
-      const response = await fetch(`http://localhost:5000/api/doctors?${params}`);
+      const response = await fetch(`http://localhost:5000/api/recommend/all-doctors?${params}`);
       const data = await response.json();
 
       if (response.ok) {
@@ -148,6 +162,49 @@ const MeetDoctor = () => {
   const handleGetDirections = (doctor) => {
     const url = `https://www.google.com/maps/dir/?api=1&destination=${doctor.latitude},${doctor.longitude}`;
     window.open(url, '_blank');
+  };
+
+  const handleBookAppointment = (doctor) => {
+    setSelectedDoctor(doctor);
+    setShowAppointmentForm(true);
+  };
+
+  const handleGetRecommendation = async () => {
+    if (!userLocation) {
+      alert('Location access required');
+      return;
+    }
+
+    if (!filters.specialization || filters.specialization === 'All') {
+      alert('Please select a specialty first');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const response = await fetch('http://localhost:5000/api/recommend/recommend-doctor', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          patient_latitude: userLocation.lat,
+          patient_longitude: userLocation.lon,
+          selected_specialty: filters.specialization
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setRecommendedDoctor(data);
+        setShowRecommendation(true);
+      } else {
+        const errorData = await response.json();
+        alert(errorData.error || 'Failed to get recommendation');
+      }
+    } catch (err) {
+      alert('Error getting recommendation');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleStartVideoCall = async (doctor) => {
@@ -224,6 +281,16 @@ const MeetDoctor = () => {
             />
           </Grid>
         </Grid>
+        <Box sx={{ mt: 2 }}>
+          <Button
+            variant="contained"
+            onClick={handleGetRecommendation}
+            disabled={!filters.specialization || filters.specialization === 'All'}
+            sx={{ bgcolor: '#4caf50', '&:hover': { bgcolor: '#45a049' } }}
+          >
+            Get Best Doctor Recommendation
+          </Button>
+        </Box>
       </Box>
 
       {loading ? (
@@ -232,6 +299,51 @@ const MeetDoctor = () => {
         </Box>
       ) : (
         <>
+          {showRecommendation && recommendedDoctor && (
+            <Card sx={{ mb: 3, border: '3px solid #4caf50', boxShadow: 3 }}>
+              <CardContent>
+                <Chip label="RECOMMENDED" color="success" sx={{ mb: 2, fontWeight: 700 }} />
+                <Typography variant="h5" fontWeight={700} gutterBottom>
+                  {recommendedDoctor.recommended_doctor.name}
+                </Typography>
+                <Typography variant="body1" color="text.secondary" gutterBottom>
+                  {recommendedDoctor.recommended_doctor.hospital}
+                </Typography>
+                <Grid container spacing={2} sx={{ my: 2 }}>
+                  <Grid item xs={3}>
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <Star sx={{ mr: 1, color: '#ffa726' }} />
+                      <Typography variant="h6">{recommendedDoctor.recommended_doctor.rating}/5.0</Typography>
+                    </Box>
+                  </Grid>
+                  <Grid item xs={3}>
+                    <Typography variant="caption" color="text.secondary">Experience</Typography>
+                    <Typography variant="h6">{recommendedDoctor.recommended_doctor.experience_years} years</Typography>
+                  </Grid>
+                  <Grid item xs={3}>
+                    <Typography variant="caption" color="text.secondary">Distance</Typography>
+                    <Typography variant="h6">{recommendedDoctor.recommended_doctor.distance_km} km</Typography>
+                  </Grid>
+                  <Grid item xs={3}>
+                    <Chip label={recommendedDoctor.recommended_doctor.availability} color="success" />
+                  </Grid>
+                </Grid>
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  <Typography variant="body2" fontWeight={600}>Why Recommended?</Typography>
+                  <Typography variant="body2">{recommendedDoctor.selection_reason}</Typography>
+                </Alert>
+                <Button
+                  variant="contained"
+                  fullWidth
+                  onClick={() => handleBookAppointment(recommendedDoctor.recommended_doctor)}
+                  sx={{ bgcolor: '#4caf50', '&:hover': { bgcolor: '#45a049' } }}
+                >
+                  Book Appointment
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
           <Typography variant="h6" gutterBottom>
             {filteredDoctors.length} Doctor{filteredDoctors.length !== 1 ? 's' : ''} Found
           </Typography>

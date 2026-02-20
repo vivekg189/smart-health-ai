@@ -6,7 +6,7 @@ import {
 } from '@mui/material';
 import {
   VideoCall, CheckCircle, Cancel, Notifications, People, Assignment, LocalHospital,
-  TrendingUp, History, Chat, Description, Add, Visibility, Close
+  TrendingUp, History, Chat, Description, Add, Visibility, Close, ArrowBack
 } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
 import VideoCallRoom from '../../components/VideoCallRoom';
@@ -594,6 +594,14 @@ const DoctorDashboard = () => {
 
       {activeSection === 'video' && (
         <>
+          <Button 
+            variant="outlined" 
+            startIcon={<ArrowBack />} 
+            onClick={() => setActiveSection('overview')} 
+            sx={{ mb: 2 }}
+          >
+            Back to Overview
+          </Button>
           {appointments.filter(a => a.status === 'completed').length === 0 ? (
             <Alert severity="info">No completed consultations yet.</Alert>
           ) : (
@@ -634,6 +642,14 @@ const DoctorDashboard = () => {
       {activeSection === 'profile' && (
         <StyledCard>
           <CardContent>
+            <Button 
+              variant="outlined" 
+              startIcon={<ArrowBack />} 
+              onClick={() => setActiveSection('overview')} 
+              sx={{ mb: 3 }}
+            >
+              Back to Overview
+            </Button>
             <Grid container spacing={3}>
               <Grid item xs={12} md={4} sx={{ textAlign: 'center' }}>
                 <Box sx={{ mb: 2 }}>
@@ -890,6 +906,14 @@ const DoctorDashboard = () => {
 
       {activeSection === 'requests' && (
         <>
+          <Button 
+            variant="outlined" 
+            startIcon={<ArrowBack />} 
+            onClick={() => setActiveSection('overview')} 
+            sx={{ mb: 2 }}
+          >
+            Back to Overview
+          </Button>
           {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
 
           {loading ? (
@@ -1023,6 +1047,14 @@ const DoctorDashboard = () => {
 
       {activeSection === 'patients' && (
         <>
+          <Button 
+            variant="outlined" 
+            startIcon={<ArrowBack />} 
+            onClick={() => setActiveSection('overview')} 
+            sx={{ mb: 2 }}
+          >
+            Back to Overview
+          </Button>
           {patients.length === 0 ? (
             <Alert severity="info">
               No patients yet. Patients will appear here after you accept and complete consultations.
@@ -1053,6 +1085,16 @@ const DoctorDashboard = () => {
 
       {activeSection === 'approvals' && (
         <Grid container spacing={3}>
+          <Grid item xs={12}>
+            <Button 
+              variant="outlined" 
+              startIcon={<ArrowBack />} 
+              onClick={() => setActiveSection('overview')} 
+              sx={{ mb: 2 }}
+            >
+              Back to Overview
+            </Button>
+          </Grid>
           <Grid item xs={12}>
             <Alert severity="info" sx={{ mb: 2 }}>
               <Typography variant="body2">

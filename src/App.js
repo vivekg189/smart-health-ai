@@ -25,6 +25,7 @@ import KidneyForm from './components/KidneyForm';
 import BoneForm from './components/BoneForm';
 import CardiovascularMultimodal from './components/CardiovascularMultimodal';
 import MeetDoctor from './components/MeetDoctor';
+import MeetDoctors from './pages/MeetDoctors';
 import VideoConsultation from './pages/VideoConsultation';
 import About from './pages/About';
 import ContactAnimated from './pages/ContactAnimated';
